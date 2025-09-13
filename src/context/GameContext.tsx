@@ -1,0 +1,278 @@
+'use client';
+
+import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult } from '@/types/game';
+
+interface GameContextType {
+  gameState: GameState;
+  initializeGame: (playerNames: string[]) => void;
+  startGame: () => void;
+  castVote: (voterId: string, targetId: string) => void;
+  submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate') => void;
+  nextPhase: () => void;
+  nextPlayer: () => void;
+  resetGame: () => void;
+  calculateVoteResult: () => VoteResult;
+}
+
+const GameContext = createContext<GameContextType | undefined>(undefined);
+
+type GameAction =
+  | { type: 'INITIALIZE_GAME'; payload: string[] }
+  | { type: 'START_GAME' }
+  | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }
+  | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' } }
+  | { type: 'NEXT_PHASE' }
+  | { type: 'NEXT_PLAYER' }
+  | { type: 'ELIMINATE_PLAYER'; payload: string }
+  | { type: 'RESET_GAME' }
+  | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' };
+
+const initialState: GameState = {
+  players: [],
+  currentPhase: GamePhase.SETUP,
+  dayCount: 1,
+  votes: {},
+  nightActions: {},
+  currentPlayerIndex: 0,
+};
+
+function assignRoles(playerNames: string[]): Player[] {
+  const numPlayers = playerNames.length;
+  const numMafia = Math.max(1, Math.floor(numPlayers / 4));
+  const hasDetective = numPlayers >= 5;
+  const hasDoctor = numPlayers >= 7;
+  
+  const roles: Role[] = [];
+  
+  // Add Mafia
+  for (let i = 0; i < numMafia; i++) {
+    roles.push(Role.MAFIA);
+  }
+  
+  // Add special roles
+  if (hasDetective) roles.push(Role.DETECTIVE);
+  if (hasDoctor) roles.push(Role.DOCTOR);
+  
+  // Fill remaining with Citizens
+  while (roles.length < numPlayers) {
+    roles.push(Role.CITIZEN);
+  }
+  
+  // Shuffle roles
+  for (let i = roles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [roles[i], roles[j]] = [roles[j], roles[i]];
+  }
+  
+  return playerNames.map((name, index) => ({
+    id: `player-${index}`,
+    name,
+    role: roles[index],
+    status: PlayerStatus.ALIVE,
+    isRevealed: false,
+  }));
+}
+
+function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | null {
+  const alivePlayers = players.filter(p => p.status === PlayerStatus.ALIVE);
+  const aliveMafia = alivePlayers.filter(p => p.role === Role.MAFIA);
+  const aliveTown = alivePlayers.filter(p => p.role !== Role.MAFIA);
+  
+  if (aliveMafia.length === 0) return 'Town';
+  if (aliveMafia.length >= aliveTown.length) return 'Mafia';
+  return null;
+}
+
+function gameReducer(state: GameState, action: GameAction): GameState {
+  switch (action.type) {
+    case 'INITIALIZE_GAME':
+      return {
+        ...initialState,
+        players: assignRoles(action.payload),
+      };
+      
+    case 'START_GAME':
+      return {
+        ...state,
+        currentPhase: GamePhase.DAY,
+      };
+      
+    case 'CAST_VOTE':
+      return {
+        ...state,
+        votes: {
+          ...state.votes,
+          [action.payload.voterId]: action.payload.targetId,
+        },
+      };
+      
+    case 'NIGHT_ACTION':
+      const { playerId, targetId, actionType } = action.payload;
+      const player = state.players.find(p => p.id === playerId);
+      
+      if (!player) return state;
+      
+      let newNightActions = { ...state.nightActions };
+      
+      if (actionType === 'kill' && player.role === Role.MAFIA) {
+        newNightActions.mafiaTarget = targetId;
+      } else if (actionType === 'protect' && player.role === Role.DOCTOR) {
+        newNightActions.doctorTarget = targetId;
+      } else if (actionType === 'investigate' && player.role === Role.DETECTIVE) {
+        newNightActions.detectiveTarget = targetId;
+      }
+      
+      return {
+        ...state,
+        nightActions: newNightActions,
+      };
+      
+    case 'ELIMINATE_PLAYER':
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id === action.payload
+            ? { ...p, status: PlayerStatus.ELIMINATED }
+            : p
+        ),
+      };
+      
+    case 'NEXT_PHASE':
+      let newPhase = state.currentPhase;
+      let newDayCount = state.dayCount;
+      let newPlayers = [...state.players];
+      
+      if (state.currentPhase === GamePhase.DAY) {
+        newPhase = GamePhase.NIGHT;
+      } else if (state.currentPhase === GamePhase.NIGHT) {
+        newPhase = GamePhase.DAY;
+        newDayCount += 1;
+        
+        // Process night actions
+        const { mafiaTarget, doctorTarget } = state.nightActions;
+        
+        if (mafiaTarget && mafiaTarget !== doctorTarget) {
+          newPlayers = newPlayers.map(p =>
+            p.id === mafiaTarget
+              ? { ...p, status: PlayerStatus.ELIMINATED }
+              : p
+          );
+        }
+      }
+      
+      const winner = checkWinCondition(newPlayers);
+      
+      return {
+        ...state,
+        currentPhase: winner ? GamePhase.GAME_OVER : newPhase,
+        dayCount: newDayCount,
+        players: newPlayers,
+        votes: {},
+        nightActions: {},
+        winner: winner || undefined,
+        currentPlayerIndex: 0,
+      };
+      
+    case 'NEXT_PLAYER':
+      return {
+        ...state,
+        currentPlayerIndex: (state.currentPlayerIndex + 1) % state.players.length,
+      };
+      
+    case 'RESET_GAME':
+      return initialState;
+      
+    default:
+      return state;
+  }
+}
+
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [gameState, dispatch] = useReducer(gameReducer, initialState);
+  
+  const initializeGame = (playerNames: string[]) => {
+    dispatch({ type: 'INITIALIZE_GAME', payload: playerNames });
+  };
+  
+  const startGame = () => {
+    dispatch({ type: 'START_GAME' });
+  };
+  
+  const castVote = (voterId: string, targetId: string) => {
+    dispatch({ type: 'CAST_VOTE', payload: { voterId, targetId } });
+  };
+  
+  const submitNightAction = (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate') => {
+    dispatch({ type: 'NIGHT_ACTION', payload: { playerId, targetId, actionType } });
+  };
+  
+  const nextPhase = () => {
+    dispatch({ type: 'NEXT_PHASE' });
+  };
+  
+  const nextPlayer = () => {
+    dispatch({ type: 'NEXT_PLAYER' });
+  };
+  
+  const resetGame = () => {
+    dispatch({ type: 'RESET_GAME' });
+  };
+  
+  const calculateVoteResult = (): VoteResult => {
+    const voteCount: Record<string, number> = {};
+    const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
+    
+    // Count votes
+    Object.values(gameState.votes).forEach(targetId => {
+      voteCount[targetId] = (voteCount[targetId] || 0) + 1;
+    });
+    
+    // Find player with most votes
+    let maxVotes = 0;
+    let eliminatedPlayer: Player | undefined;
+    let isTie = false;
+    
+    Object.entries(voteCount).forEach(([playerId, votes]) => {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        eliminatedPlayer = gameState.players.find(p => p.id === playerId);
+        isTie = false;
+      } else if (votes === maxVotes && maxVotes > 0) {
+        isTie = true;
+      }
+    });
+    
+    return {
+      eliminatedPlayer: isTie ? undefined : eliminatedPlayer,
+      isTie,
+      voteCount,
+    };
+  };
+  
+  return (
+    <GameContext.Provider
+      value={{
+        gameState,
+        initializeGame,
+        startGame,
+        castVote,
+        submitNightAction,
+        nextPhase,
+        nextPlayer,
+        resetGame,
+        calculateVoteResult,
+      }}
+    >
+      {children}
+    </GameContext.Provider>
+  );
+}
+
+export function useGame() {
+  const context = useContext(GameContext);
+  if (context === undefined) {
+    throw new Error('useGame must be used within a GameProvider');
+  }
+  return context;
+}
