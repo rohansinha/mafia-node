@@ -26,7 +26,7 @@ type GameAction =
   | { type: 'NEXT_PLAYER' }
   | { type: 'ELIMINATE_PLAYER'; payload: string }
   | { type: 'RESET_GAME' }
-  | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' };
+  | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' | 'Joker' };
 
 const initialState: GameState = {
   players: [],
@@ -39,20 +39,34 @@ const initialState: GameState = {
 
 function assignRoles(playerNames: string[]): Player[] {
   const numPlayers = playerNames.length;
-  const numMafia = Math.max(1, Math.floor(numPlayers / 4));
-  const hasDetective = numPlayers >= 5;
-  const hasDoctor = numPlayers >= 7;
-  
   const roles: Role[] = [];
   
-  // Add Mafia
+  // Mafia roles (1 per 4 players, minimum 1)
+  const numMafia = Math.max(1, Math.floor(numPlayers / 4));
+  
+  // Add Mafia roles
   for (let i = 0; i < numMafia; i++) {
-    roles.push(Role.MAFIA);
+    if (i === 0 && numPlayers >= 8) {
+      // First mafia is Godfather for larger games
+      roles.push(Role.GODFATHER);
+    } else {
+      roles.push(Role.MAFIA);
+    }
   }
   
-  // Add special roles
-  if (hasDetective) roles.push(Role.DETECTIVE);
-  if (hasDoctor) roles.push(Role.DOCTOR);
+  // Add Hooker (mafia role) for very large games
+  if (numPlayers >= 12) {
+    roles.push(Role.HOOKER);
+  }
+  
+  // Add town special roles based on player count
+  if (numPlayers >= 5) roles.push(Role.DETECTIVE);
+  if (numPlayers >= 7) roles.push(Role.DOCTOR);
+  if (numPlayers >= 9) roles.push(Role.SILENCER);
+  if (numPlayers >= 11) roles.push(Role.KAMIKAZE);
+  
+  // Add Joker for medium+ games (independent role)
+  if (numPlayers >= 10) roles.push(Role.JOKER);
   
   // Fill remaining with Citizens
   while (roles.length < numPlayers) {
@@ -71,16 +85,32 @@ function assignRoles(playerNames: string[]): Player[] {
     role: roles[index],
     status: PlayerStatus.ALIVE,
     isRevealed: false,
+    isSilenced: false,
+    isRoleblocked: false,
   }));
 }
 
-function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | null {
+function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null {
   const alivePlayers = players.filter(p => p.status === PlayerStatus.ALIVE);
-  const aliveMafia = alivePlayers.filter(p => p.role === Role.MAFIA);
-  const aliveTown = alivePlayers.filter(p => p.role !== Role.MAFIA);
+  const aliveMafia = alivePlayers.filter(p => 
+    p.role === Role.MAFIA || p.role === Role.GODFATHER || p.role === Role.HOOKER
+  );
+  const aliveTown = alivePlayers.filter(p => 
+    p.role === Role.CITIZEN || p.role === Role.DETECTIVE || 
+    p.role === Role.DOCTOR || p.role === Role.SILENCER || 
+    p.role === Role.KAMIKAZE
+  );
+  const aliveJoker = alivePlayers.find(p => p.role === Role.JOKER);
   
+  // Joker wins if they're the only one left or if they were voted out (handled elsewhere)
+  if (aliveJoker && alivePlayers.length === 1) return 'Joker';
+  
+  // Town wins if all mafia are eliminated
   if (aliveMafia.length === 0) return 'Town';
+  
+  // Mafia wins if they equal or outnumber town
   if (aliveMafia.length >= aliveTown.length) return 'Mafia';
+  
   return null;
 }
 

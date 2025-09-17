@@ -2,7 +2,12 @@ export enum Role {
   MAFIA = 'Mafia',
   DETECTIVE = 'Detective',
   DOCTOR = 'Doctor',
-  CITIZEN = 'Citizen'
+  CITIZEN = 'Citizen',
+  JOKER = 'Joker',
+  GODFATHER = 'Godfather',
+  HOOKER = 'Hooker',
+  KAMIKAZE = 'Kamikaze',
+  SILENCER = 'Silencer'
 }
 
 export enum GamePhase {
@@ -24,6 +29,8 @@ export interface Player {
   role: Role;
   status: PlayerStatus;
   isRevealed: boolean;
+  isSilenced?: boolean;
+  isRoleblocked?: boolean;
 }
 
 export interface GameState {
@@ -35,8 +42,12 @@ export interface GameState {
     mafiaTarget?: string;
     doctorTarget?: string;
     detectiveTarget?: string;
+    godfatherTarget?: string;
+    hookerTarget?: string;
+    kamikazeTarget?: string;
+    silencerTarget?: string;
   };
-  winner?: 'Mafia' | 'Town';
+  winner?: 'Mafia' | 'Town' | 'Joker';
   currentPlayerIndex: number; // For passing device around
 }
 
