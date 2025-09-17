@@ -1,3 +1,19 @@
+/**
+ * Day Phase Component - Discussion and voting mechanics
+ * 
+ * Handles the day phase of the game including:
+ * - Group discussion (with silencing mechanics)
+ * - Democratic voting to eliminate suspects
+ * - Special elimination handling (Joker instant win, Kamikaze revenge)
+ * - Vote result calculation and display
+ * - Device-passing voting interface
+ * 
+ * Key features:
+ * - Silenced players cannot speak but can still vote
+ * - Kamikaze players get revenge kill when eliminated
+ * - Joker wins immediately if voted out
+ * - Tie votes result in no elimination
+ */
 'use client';
 
 import { useState } from 'react';
@@ -6,17 +22,23 @@ import { PlayerStatus, Role } from '@/types/game';
 
 export default function DayPhase() {
   const { gameState, castVote, nextPhase, calculateVoteResult, kamikazeRevenge } = useGame();
-  const [selectedTarget, setSelectedTarget] = useState<string>('');
-  const [showVoting, setShowVoting] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [showKamikazeChoice, setShowKamikazeChoice] = useState(false);
-  const [kamikazeTarget, setKamikazeTarget] = useState<string>('');
+  
+  // Component state for UI flow management
+  const [selectedTarget, setSelectedTarget] = useState<string>('');      // Currently selected vote target
+  const [showVoting, setShowVoting] = useState(false);                   // Whether to show voting interface
+  const [showResults, setShowResults] = useState(false);                 // Whether to show vote results
+  const [showKamikazeChoice, setShowKamikazeChoice] = useState(false);   // Whether to show kamikaze revenge selection
+  const [kamikazeTarget, setKamikazeTarget] = useState<string>('');      // Selected target for kamikaze revenge
 
+  // Filter players for different contexts
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
   const silencedPlayers = gameState.players.filter(p => p.isSilenced && p.status === PlayerStatus.ALIVE);
   const currentPlayer = alivePlayers[gameState.currentPlayerIndex % alivePlayers.length];
   const votingTargets = alivePlayers.filter(p => p.id !== currentPlayer?.id);
 
+  /**
+   * Handles vote submission for the current player
+   */
   const handleCastVote = () => {
     if (selectedTarget && currentPlayer) {
       castVote(currentPlayer.id, selectedTarget);
@@ -25,14 +47,20 @@ export default function DayPhase() {
     }
   };
 
+  /**
+   * Shows the vote results screen
+   */
   const handleShowResults = () => {
     setShowResults(true);
   };
 
+  /**
+   * Handles phase transition with special role logic
+   */
   const handleNextPhase = () => {
     const voteResult = calculateVoteResult();
     
-    // Check if eliminated player is Kamikaze
+    // Check if eliminated player is Kamikaze - triggers revenge mechanic
     if (voteResult.eliminatedPlayer?.role === Role.KAMIKAZE) {
       const otherPlayers = alivePlayers.filter(p => p.id !== voteResult.eliminatedPlayer?.id);
       if (otherPlayers.length > 0) {
@@ -41,18 +69,16 @@ export default function DayPhase() {
       }
     }
     
-    // Check if eliminated player is Joker (wins immediately)
-    if (voteResult.eliminatedPlayer?.role === Role.JOKER) {
-      // Joker wins - this will be handled by the game logic
-    }
-    
+    // Joker instant win is handled in the game logic
     nextPhase();
     setShowResults(false);
   };
 
+  /**
+   * Processes Kamikaze revenge kill and continues game
+   */
   const handleKamikazeRevenge = () => {
     if (kamikazeTarget) {
-      // Process Kamikaze revenge kill
       kamikazeRevenge(kamikazeTarget);
       nextPhase();
       setShowKamikazeChoice(false);
@@ -61,7 +87,7 @@ export default function DayPhase() {
     }
   };
 
-  // Kamikaze revenge selection screen
+  // Kamikaze revenge selection screen - special mechanic when Kamikaze is eliminated
   if (showKamikazeChoice) {
     const voteResult = calculateVoteResult();
     const kamikazePlayer = voteResult.eliminatedPlayer;
@@ -120,12 +146,14 @@ export default function DayPhase() {
     );
   }
 
+  // Vote results display screen - shows voting outcome and special role reveals
   if (showResults) {
     const voteResult = calculateVoteResult();
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
         <h2 className="text-2xl font-bold text-white text-center">Vote Results</h2>
         
+        {/* Display vote count breakdown for all players */}
         <div className="space-y-3">
           {Object.entries(voteResult.voteCount).map(([playerId, count]) => {
             const player = gameState.players.find(p => p.id === playerId);
@@ -138,13 +166,14 @@ export default function DayPhase() {
           })}
         </div>
 
+        {/* Show elimination result with special role handling */}
         {voteResult.eliminatedPlayer ? (
           <div className={`text-center p-4 border rounded-lg ${
             voteResult.eliminatedPlayer.role === Role.JOKER 
-              ? 'bg-yellow-600/20 border-yellow-500' 
+              ? 'bg-yellow-600/20 border-yellow-500'  // Joker elimination = Joker wins
               : voteResult.eliminatedPlayer.role === Role.KAMIKAZE
-              ? 'bg-orange-600/20 border-orange-500'
-              : 'bg-red-600/20 border-red-500'
+              ? 'bg-orange-600/20 border-orange-500'  // Kamikaze elimination = revenge mechanic
+              : 'bg-red-600/20 border-red-500'        // Standard elimination
           }`}>
             <p className={`text-lg font-semibold ${
               voteResult.eliminatedPlayer.role === Role.JOKER ? 'text-yellow-200' : 
@@ -158,6 +187,7 @@ export default function DayPhase() {
             }`}>
               They were a {voteResult.eliminatedPlayer.role}
             </p>
+            {/* Special role victory/action messages */}
             {voteResult.eliminatedPlayer.role === Role.JOKER && (
               <p className="text-yellow-300 text-sm mt-2 font-semibold">
                 🃏 The Joker wins the game! 🃏
@@ -170,6 +200,7 @@ export default function DayPhase() {
             )}
           </div>
         ) : (
+          // No elimination due to tie vote
           <div className="text-center p-4 bg-yellow-600/20 border border-yellow-500 rounded-lg">
             <p className="text-yellow-200 text-lg font-semibold">
               No elimination - tie vote!
@@ -187,6 +218,7 @@ export default function DayPhase() {
     );
   }
 
+  // Individual player voting interface - shown when a player is casting their vote
   if (showVoting && currentPlayer) {
     const isCurrentPlayerSilenced = currentPlayer.isSilenced;
     
@@ -196,6 +228,7 @@ export default function DayPhase() {
           {currentPlayer.name}&apos;s Vote
         </h2>
         
+        {/* Show silenced status if applicable */}
         {isCurrentPlayerSilenced && (
           <div className="text-center p-3 bg-purple-600/20 border border-purple-500 rounded-lg">
             <p className="text-purple-200 text-sm">
@@ -208,6 +241,7 @@ export default function DayPhase() {
           Who do you want to vote to eliminate?
         </p>
 
+        {/* Vote target selection buttons */}
         <div className="space-y-2">
           {votingTargets.map((player) => (
             <button
@@ -221,12 +255,14 @@ export default function DayPhase() {
             >
               <div className="flex justify-between items-center">
                 <span>{player.name}</span>
+                {/* Indicate if target is silenced */}
                 {player.isSilenced && <span className="text-purple-300 text-xs">🔇 Silenced</span>}
               </div>
             </button>
           ))}
         </div>
 
+        {/* Vote confirmation buttons */}
         <div className="flex gap-2">
           <button
             onClick={() => setShowVoting(false)}
@@ -246,13 +282,15 @@ export default function DayPhase() {
     );
   }
 
+  // Check if all players have voted to enable results viewing
   const allVotesCast = Object.keys(gameState.votes).length === alivePlayers.length;
 
+  // Main discussion interface - shown when not voting or viewing results
   return (
     <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
       <h2 className="text-2xl font-bold text-white text-center">☀️ Day {gameState.dayCount} - Discussion & Voting</h2>
       
-      {/* Silenced players notification */}
+      {/* Silenced players notification - important for game strategy */}
       {silencedPlayers.length > 0 && (
         <div className="bg-purple-600/20 border border-purple-500 rounded-lg p-4">
           <h3 className="text-purple-200 font-semibold mb-2">🔇 Silenced Players</h3>
@@ -269,6 +307,7 @@ export default function DayPhase() {
         </div>
       )}
       
+      {/* Discussion phase instructions */}
       <div className="text-center p-4 bg-blue-600/20 border border-blue-500 rounded-lg">
         <p className="text-blue-200 text-lg">
           Discuss who might be the Mafia and vote to eliminate someone!
@@ -280,7 +319,9 @@ export default function DayPhase() {
         )}
       </div>
 
+      {/* Device-passing voting interface or vote progress display */}
       {currentPlayer && !gameState.votes[currentPlayer.id] ? (
+        // Show voting button for current player who hasn't voted yet
         <div className="text-center">
           <p className="text-white/80 mb-4">
             Pass the device to <strong className="text-white">{currentPlayer.name}</strong>
@@ -294,6 +335,7 @@ export default function DayPhase() {
           </button>
         </div>
       ) : (
+        // Show voting progress and results button when all votes are cast
         <div className="text-center space-y-4">
           <div className="text-white/80">
             <p>Votes cast: {Object.keys(gameState.votes).length} / {alivePlayers.length}</p>

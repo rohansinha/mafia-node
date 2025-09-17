@@ -1,3 +1,15 @@
+/**
+ * Game Board Component - Main game coordinator and display
+ * 
+ * Handles routing between different game phases and modes:
+ * - MODE_SELECTION: Shows GameModeSelection component
+ * - Online mode: Shows OnlinePlay placeholder
+ * - GAME_OVER: Shows GameOver results
+ * - DAY/NIGHT phases: Shows game interface with player status
+ * 
+ * Displays current game status, player information, and phase content.
+ * Provides reset functionality and live game statistics.
+ */
 'use client';
 
 import { useGame } from '@/context/GameContext';
@@ -11,20 +23,22 @@ import GameOver from '@/components/GameOver';
 export default function GameBoard() {
   const { gameState, resetGame } = useGame();
 
-  // Handle mode selection phase
+  // Route to mode selection if no mode chosen yet
   if (gameState.currentPhase === GamePhase.MODE_SELECTION) {
     return <GameModeSelection />;
   }
 
-  // Handle online play mode (placeholder)
+  // Route to online placeholder if online mode selected
   if (gameState.gameMode === GameMode.ONLINE) {
     return <OnlinePlay />;
   }
 
+  // Route to game over screen when game ends
   if (gameState.currentPhase === GamePhase.GAME_OVER) {
     return <GameOver />;
   }
 
+  // Filter for alive players to display current game status
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
 
   return (
@@ -53,6 +67,7 @@ export default function GameBoard() {
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-4">
         <h3 className="text-lg font-semibold text-white mb-3">Player Status</h3>
         <div className="grid grid-cols-2 gap-2">
+          {/* Display all players with color-coded status indicators */}
           {gameState.players.map((player) => (
             <div
               key={player.id}
@@ -71,7 +86,7 @@ export default function GameBoard() {
         </div>
       </div>
 
-      {/* Phase Content */}
+      {/* Phase-specific content - routes to appropriate component */}
       {gameState.currentPhase === GamePhase.DAY ? (
         <DayPhase />
       ) : (

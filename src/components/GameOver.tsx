@@ -1,3 +1,22 @@
+/**
+ * Game Over Component - Victory screen and game results
+ * 
+ * Displays the final game results including:
+ * - Winner announcement with team-specific styling
+ * - Complete player roster with role reveals
+ * - Team compositions (Mafia, Town, Special roles)
+ * - Game restart functionality
+ * 
+ * Handles different victory conditions:
+ * - Mafia Victory: Eliminates all Town members
+ * - Town Victory: Eliminates all Mafia members
+ * - Joker Victory: Gets voted out during day phase
+ * 
+ * Features:
+ * - Color-coded role reveals
+ * - Team grouping for easy analysis
+ * - New game option to restart
+ */
 'use client';
 
 import { useGame } from '@/context/GameContext';
@@ -6,6 +25,9 @@ import { Role } from '@/types/game';
 export default function GameOver() {
   const { gameState, resetGame } = useGame();
 
+  /**
+   * Gets all players who were part of the Mafia team
+   */
   const getMafiaPlayers = () => {
     return gameState.players.filter(p => 
       p.role === Role.MAFIA || p.role === Role.GODFATHER || p.role === Role.HOOKER

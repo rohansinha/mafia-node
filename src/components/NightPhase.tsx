@@ -1,3 +1,24 @@
+/**
+ * Night Phase Component - Sequential special role actions
+ * 
+ * Handles the night phase where special roles perform their actions in order:
+ * - Mafia/Godfather: Choose victim to eliminate
+ * - Hooker: Roleblock a player (preventing their action)
+ * - Detective: Investigate a player's role
+ * - Doctor: Protect a player from elimination
+ * - Silencer: Silence a player for next day phase
+ * 
+ * Key features:
+ * - Sequential role processing (one role at a time)
+ * - Role-specific targeting restrictions
+ * - Skip option for roles that don't want to act
+ * - Action submission and phase progression
+ * 
+ * Role restrictions:
+ * - Mafia cannot target other Mafia members
+ * - Hooker cannot target Godfather or other Hookers
+ * - Other roles can target anyone alive
+ */
 'use client';
 
 import { useState } from 'react';
@@ -6,13 +27,15 @@ import { Role, PlayerStatus } from '@/types/game';
 
 export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
+  
+  // Component state for managing night action flow
   const [selectedAction, setSelectedAction] = useState<'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null>(null);
-  const [selectedTarget, setSelectedTarget] = useState<string>('');
-  const [currentRoleIndex, setCurrentRoleIndex] = useState(0);
+  const [selectedTarget, setSelectedTarget] = useState<string>('');     // Currently selected target
+  const [currentRoleIndex, setCurrentRoleIndex] = useState(0);          // Index in the role order
 
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
   
-  // Define night role order (mafia first, then others)
+  // Define night role action order (Mafia acts first, then others)
   const roleOrder = [
     Role.MAFIA, 
     Role.GODFATHER, 
@@ -22,6 +45,7 @@ export default function NightPhase() {
     Role.SILENCER
   ];
   
+  // Filter to only roles that have living players
   const activeRoles = roleOrder.filter(role => 
     alivePlayers.some(p => p.role === role)
   );
@@ -29,24 +53,26 @@ export default function NightPhase() {
   const currentRole = activeRoles[currentRoleIndex];
   const currentRolePlayers = alivePlayers.filter(p => p.role === currentRole);
   
-  // Get valid targets based on role
+  /**
+   * Get valid targets based on role-specific restrictions
+   */
   const getActionTargets = (role: Role) => {
     switch (role) {
       case Role.MAFIA:
       case Role.GODFATHER:
-        // Can't kill other mafia members
+        // Mafia cannot kill other mafia team members (includes Hooker)
         return alivePlayers.filter(p => 
           p.role !== Role.MAFIA && p.role !== Role.GODFATHER && p.role !== Role.HOOKER
         );
       case Role.HOOKER:
-        // Can roleblock anyone except Godfather
+        // Hooker can roleblock anyone except Godfather (immune) and other Hookers
         return alivePlayers.filter(p => 
           p.role !== Role.HOOKER && p.role !== Role.GODFATHER
         );
       case Role.DETECTIVE:
       case Role.DOCTOR:
       case Role.SILENCER:
-        // Can target anyone
+        // These roles can target anyone alive
         return alivePlayers;
       default:
         return alivePlayers;
@@ -55,10 +81,14 @@ export default function NightPhase() {
 
   const actionTargets = getActionTargets(currentRole);
 
+  /**
+   * Submits the current role's action and progresses to next role
+   */
   const handleSubmitAction = () => {
     if (selectedTarget && selectedAction && currentRolePlayers[0]) {
       submitNightAction(currentRolePlayers[0].id, selectedTarget, selectedAction);
       
+      // Move to next role or end night phase
       if (currentRoleIndex < activeRoles.length - 1) {
         setCurrentRoleIndex(currentRoleIndex + 1);
         setSelectedTarget('');
@@ -69,6 +99,9 @@ export default function NightPhase() {
     }
   };
 
+  /**
+   * Skips the current role's action and progresses to next role
+   */
   const handleSkipAction = () => {
     if (currentRoleIndex < activeRoles.length - 1) {
       setCurrentRoleIndex(currentRoleIndex + 1);
@@ -79,6 +112,7 @@ export default function NightPhase() {
     }
   };
 
+  // Handle case where no night roles are alive
   if (!currentRole || currentRolePlayers.length === 0) {
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
@@ -94,6 +128,9 @@ export default function NightPhase() {
     );
   }
 
+  /**
+   * Maps role to its corresponding action type
+   */
   const getActionType = (role: Role) => {
     switch (role) {
       case Role.MAFIA:
@@ -112,6 +149,9 @@ export default function NightPhase() {
     }
   };
 
+  /**
+   * Gets user-friendly action description for each role
+   */
   const getActionDescription = (role: Role) => {
     switch (role) {
       case Role.MAFIA:
@@ -131,6 +171,9 @@ export default function NightPhase() {
     }
   };
 
+  /**
+   * Gets role-specific color scheme for UI theming
+   */
   const getRoleColor = (role: Role) => {
     switch (role) {
       case Role.MAFIA:
@@ -149,6 +192,9 @@ export default function NightPhase() {
     }
   };
 
+  /**
+   * Gets detailed role instructions for player guidance
+   */
   const getRoleInstructions = (role: Role) => {
     switch (role) {
       case Role.MAFIA:
@@ -168,19 +214,20 @@ export default function NightPhase() {
     }
   };
 
+  // Main night phase UI with role-specific interface
   return (
     <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
       <h2 className="text-2xl font-bold text-white text-center">🌙 Night Phase</h2>
       
-      {/* Progress indicator */}
+      {/* Progress indicator showing which roles have acted */}
       <div className="flex justify-center space-x-2 mb-4">
         {activeRoles.map((role, index) => (
           <div
             key={role}
             className={`w-3 h-3 rounded-full ${
-              index < currentRoleIndex ? 'bg-green-500' :
-              index === currentRoleIndex ? 'bg-purple-500' :
-              'bg-gray-500'
+              index < currentRoleIndex ? 'bg-green-500' :    // Completed
+              index === currentRoleIndex ? 'bg-purple-500' : // Current
+              'bg-gray-500'                                   // Pending
             }`}
           />
         ))}
@@ -242,6 +289,7 @@ export default function NightPhase() {
           </div>
         </div>
       ) : (
+        // Initial action selection screen - player decides whether to act
         <div className="text-center">
           <p className="text-white/80 mb-4">{getActionDescription(currentRole)}</p>
           <div className="space-y-2">
@@ -263,7 +311,7 @@ export default function NightPhase() {
         </div>
       )}
       
-      {/* Role summary */}
+      {/* Progress summary showing remaining roles */}
       <div className="bg-white/5 rounded-lg p-3">
         <div className="text-white/70 text-xs">
           <p>Progress: {currentRoleIndex + 1} of {activeRoles.length} roles</p>

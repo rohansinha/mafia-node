@@ -1,3 +1,22 @@
+/**
+ * Setup Phase Component - Game configuration and player setup
+ * 
+ * Handles the complete game setup process including:
+ * - Assignment mode selection (Recommended vs Custom)
+ * - Player name entry and management
+ * - Custom role selection and configuration
+ * - Game initialization and role assignment
+ * 
+ * Setup flow:
+ * 1. Mode selection: Recommended (balanced) or Custom (user-defined) roles
+ * 2. For Recommended: Enter player names → automatic role assignment
+ * 3. For Custom: Set player count → select roles → enter names → assignment
+ * 
+ * Features:
+ * - Dynamic player list management (add/remove players)
+ * - Role validation for Custom mode
+ * - Seamless transition to game start
+ */
 'use client';
 
 import { useState } from 'react';
@@ -5,29 +24,42 @@ import { useGame } from '@/context/GameContext';
 import { AssignmentMode, Role } from '@/types/game';
 
 export default function SetupPhase() {
+  // Component state for managing setup flow
   const [step, setStep] = useState<'mode' | 'players' | 'custom-roles' | 'roles'>('mode');
   const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>(AssignmentMode.RECOMMENDED);
-  const [playerNames, setPlayerNames] = useState<string[]>(['']);
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);
-  const [totalPlayers, setTotalPlayers] = useState<number>(6);
+  const [playerNames, setPlayerNames] = useState<string[]>(['']);               // Player name inputs
+  const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);              // Custom mode role selection
+  const [totalPlayers, setTotalPlayers] = useState<number>(6);                 // Custom mode player count
   const { gameState, initializeGame, startGame, getAvailableCustomRoles } = useGame();
 
+  /**
+   * Adds a new empty player name input field
+   */
   const addPlayer = () => {
     setPlayerNames([...playerNames, '']);
   };
 
+  /**
+   * Removes a player name input at the specified index
+   */
   const removePlayer = (index: number) => {
     if (playerNames.length > 1) {
       setPlayerNames(playerNames.filter((_, i) => i !== index));
     }
   };
 
+  /**
+   * Updates the player name at the specified index
+   */
   const updatePlayerName = (index: number, name: string) => {
     const newNames = [...playerNames];
     newNames[index] = name;
     setPlayerNames(newNames);
   };
 
+  /**
+   * Toggles role selection in custom mode
+   */
   const toggleRole = (role: Role) => {
     setSelectedRoles(prev => 
       prev.includes(role) 
@@ -36,23 +68,33 @@ export default function SetupPhase() {
     );
   };
 
+  /**
+   * Handles assignment mode selection and navigation
+   */
   const handleModeSelect = (mode: AssignmentMode) => {
     setAssignmentMode(mode);
     if (mode === AssignmentMode.RECOMMENDED) {
-      setStep('players');
+      setStep('players');  // Go directly to player names for recommended mode
     } else {
-      setStep('custom-roles');
+      setStep('custom-roles');  // Go to role selection for custom mode
     }
   };
 
+  /**
+   * Validates custom role selection and proceeds to player setup
+   */
   const handleCustomRolesNext = () => {
-    if (selectedRoles.length + 2 <= totalPlayers) { // +2 for minimum citizen and mafia
+    // Ensure we have room for at least 1 Citizen and 1 Mafia + selected roles
+    if (selectedRoles.length + 2 <= totalPlayers) {
       const names = Array.from({ length: totalPlayers }, (_, i) => `Player ${i + 1}`);
       setPlayerNames(names);
       setStep('players');
     }
   };
 
+  /**
+   * Initializes the game with validated player names and assignment mode
+   */
   const handleInitialize = () => {
     const validNames = playerNames.filter(name => name.trim() !== '');
     if (validNames.length >= 4) {
@@ -61,36 +103,45 @@ export default function SetupPhase() {
       } else {
         initializeGame(validNames, assignmentMode);
       }
-      setStep('roles');
+      setStep('roles');  // Show role assignments before starting
     }
   };
 
+  /**
+   * Starts the actual game after role assignments are shown
+   */
   const handleStartGame = () => {
     startGame();
   };
 
+  /**
+   * Returns appropriate color styling for each role type
+   */
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'Mafia':
       case 'Godfather':
-        return 'bg-red-600 text-white';
+        return 'bg-red-600 text-white';        // Red for Mafia team
       case 'Detective':
-        return 'bg-blue-600 text-white';
+        return 'bg-blue-600 text-white';       // Blue for Detective
       case 'Doctor':
-        return 'bg-green-600 text-white';
+        return 'bg-green-600 text-white';      // Green for Doctor
       case 'Silencer':
-        return 'bg-purple-600 text-white';
+        return 'bg-purple-600 text-white';     // Purple for Silencer
       case 'Kamikaze':
-        return 'bg-orange-600 text-white';
+        return 'bg-orange-600 text-white';     // Orange for Kamikaze
       case 'Joker':
-        return 'bg-yellow-600 text-black';
+        return 'bg-yellow-600 text-black';     // Yellow for Joker (black text for contrast)
       case 'Hooker':
-        return 'bg-pink-600 text-white';
+        return 'bg-pink-600 text-white';       // Pink for Hooker
       default:
-        return 'bg-gray-600 text-white';
+        return 'bg-gray-600 text-white';       // Gray for Citizens and others
     }
   };
 
+  /**
+   * Returns detailed role description for each role type
+   */
   const getRoleDescription = (role: string) => {
     switch (role) {
       case 'Mafia':
@@ -116,13 +167,14 @@ export default function SetupPhase() {
     }
   };
 
-  // Mode Selection Screen
+  // Assignment Mode Selection Screen
   if (step === 'mode') {
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-6">
         <h2 className="text-2xl font-bold text-white text-center">Choose Assignment Mode</h2>
         
         <div className="space-y-4">
+          {/* Recommended mode - balanced automatic assignment */}
           <button
             onClick={() => handleModeSelect(AssignmentMode.RECOMMENDED)}
             className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg text-left transition-colors"

@@ -1,3 +1,8 @@
+/**
+ * Root layout component for the Next.js application.
+ * Provides global metadata, font configuration, and wraps the entire app
+ * with the GameProvider context for state management.
+ */
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -10,6 +15,10 @@ export const metadata: Metadata = {
   description: "A digital Mafia party game for large groups",
 };
 
+/**
+ * Root layout that wraps all pages with GameProvider context
+ * and applies global styling and font configuration.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

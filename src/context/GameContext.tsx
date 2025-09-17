@@ -1,38 +1,53 @@
+/**
+ * Game Context Provider - Central state management for the Mafia game.
+ * 
+ * This file contains:
+ * - GameContextType interface defining all available game actions
+ * - GameAction type union for all possible state changes
+ * - Role assignment functions (recommended and custom modes)
+ * - Win condition checking logic
+ * - Main game reducer handling all state transitions
+ * - Provider component wrapping the entire application
+ * - Custom hook for accessing game state and actions
+ */
 'use client';
 
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult, AssignmentMode, CustomRoleConfig, GameMode } from '@/types/game';
 
+// Interface defining all available game actions and state
 interface GameContextType {
-  gameState: GameState;
-  selectGameMode: (mode: GameMode) => void;
-  initializeGame: (playerNames: string[], mode?: AssignmentMode, customConfig?: CustomRoleConfig) => void;
-  startGame: () => void;
-  castVote: (voterId: string, targetId: string) => void;
-  submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock') => void;
-  nextPhase: () => void;
-  nextPlayer: () => void;
-  resetGame: () => void;
-  kamikazeRevenge: (targetId: string) => void;
-  calculateVoteResult: () => VoteResult;
-  getAvailableCustomRoles: () => Role[];
+  gameState: GameState;                    // Current game state
+  selectGameMode: (mode: GameMode) => void; // Choose between offline/online mode
+  initializeGame: (playerNames: string[], mode?: AssignmentMode, customConfig?: CustomRoleConfig) => void; // Set up new game
+  startGame: () => void;                   // Begin gameplay after setup
+  castVote: (voterId: string, targetId: string) => void; // Submit day phase vote
+  submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock') => void; // Submit night action
+  nextPhase: () => void;                   // Advance to next game phase
+  nextPlayer: () => void;                  // Move to next player for device passing
+  resetGame: () => void;                   // Reset to initial state
+  kamikazeRevenge: (targetId: string) => void; // Handle kamikaze revenge kill
+  calculateVoteResult: () => VoteResult;   // Calculate day phase voting results
+  getAvailableCustomRoles: () => Role[];   // Get roles available for custom assignment
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
+// Union type defining all possible actions that can modify game state
 type GameAction =
-  | { type: 'SELECT_GAME_MODE'; payload: GameMode }
-  | { type: 'INITIALIZE_GAME'; payload: { playerNames: string[]; mode?: AssignmentMode; customConfig?: CustomRoleConfig } }
-  | { type: 'START_GAME' }
-  | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }
-  | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' } }
-  | { type: 'NEXT_PHASE' }
-  | { type: 'NEXT_PLAYER' }
-  | { type: 'ELIMINATE_PLAYER'; payload: string }
-  | { type: 'KAMIKAZE_REVENGE'; payload: string }
-  | { type: 'RESET_GAME' }
-  | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' | 'Joker' };
+  | { type: 'SELECT_GAME_MODE'; payload: GameMode }                              // User selects offline/online mode
+  | { type: 'INITIALIZE_GAME'; payload: { playerNames: string[]; mode?: AssignmentMode; customConfig?: CustomRoleConfig } } // Set up new game with players and roles
+  | { type: 'START_GAME' }                                                       // Begin gameplay after setup
+  | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }       // Player votes during day phase
+  | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' } } // Night phase actions
+  | { type: 'NEXT_PHASE' }                                                       // Advance to next game phase
+  | { type: 'NEXT_PLAYER' }                                                      // Move to next player for device passing
+  | { type: 'ELIMINATE_PLAYER'; payload: string }                               // Remove player from game
+  | { type: 'KAMIKAZE_REVENGE'; payload: string }                               // Handle kamikaze revenge elimination
+  | { type: 'RESET_GAME' }                                                       // Reset to initial state
+  | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' | 'Joker' };               // Set game winner
 
+// Initial game state - starts at mode selection
 const initialState: GameState = {
   players: [],
   currentPhase: GamePhase.MODE_SELECTION,
@@ -42,48 +57,59 @@ const initialState: GameState = {
   currentPlayerIndex: 0,
 };
 
+/**
+ * Assigns roles using the recommended balanced distribution.
+ * Automatically determines the optimal role mix based on player count.
+ * 
+ * Distribution logic:
+ * - 4-6 players: 1 Mafia, 1 Detective, rest Citizens
+ * - 7-9 players: 1 Mafia, 1 Detective, 1 Doctor, rest Citizens  
+ * - 10+ players: Additional Mafia and special roles for balance
+ */
 function assignRolesRecommended(playerNames: string[]): Player[] {
   const numPlayers = playerNames.length;
   const roles: Role[] = [];
   
-  // Mafia roles (1 per 4 players, minimum 1)
+  // Calculate optimal number of Mafia roles (1 per 4 players, minimum 1)
   const numMafia = Math.max(1, Math.floor(numPlayers / 4));
   
-  // Add Mafia roles
+  // Add Mafia roles with enhanced roles for larger games
   for (let i = 0; i < numMafia; i++) {
     if (i === 0 && numPlayers >= 8) {
-      // First mafia is Godfather for larger games
+      // First mafia is Godfather for larger games (enhanced killing ability)
       roles.push(Role.GODFATHER);
     } else {
+      // Additional mafia are basic Mafia members
       roles.push(Role.MAFIA);
     }
   }
   
-  // Add Hooker (mafia role) for very large games
+  // Add Hooker (mafia roleblocking role) for very large games
   if (numPlayers >= 12) {
     roles.push(Role.HOOKER);
   }
   
-  // Add town special roles based on player count
-  if (numPlayers >= 5) roles.push(Role.DETECTIVE);
-  if (numPlayers >= 7) roles.push(Role.DOCTOR);
-  if (numPlayers >= 9) roles.push(Role.SILENCER);
-  if (numPlayers >= 11) roles.push(Role.KAMIKAZE);
+  // Add town special roles progressively based on player count
+  if (numPlayers >= 5) roles.push(Role.DETECTIVE);  // Investigation ability
+  if (numPlayers >= 7) roles.push(Role.DOCTOR);     // Protection ability
+  if (numPlayers >= 9) roles.push(Role.SILENCER);   // Silencing ability
+  if (numPlayers >= 11) roles.push(Role.KAMIKAZE);  // Revenge elimination
   
-  // Add Joker for medium+ games (independent role)
+  // Add Joker for medium+ games (independent win condition)
   if (numPlayers >= 10) roles.push(Role.JOKER);
   
-  // Fill remaining with Citizens
+  // Fill remaining slots with basic Citizens
   while (roles.length < numPlayers) {
     roles.push(Role.CITIZEN);
   }
   
-  // Shuffle roles
+  // Shuffle roles array to randomize assignment
   for (let i = roles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [roles[i], roles[j]] = [roles[j], roles[i]];
   }
   
+  // Create player objects with assigned roles
   return playerNames.map((name, index) => ({
     id: `player-${index}`,
     name,
@@ -95,20 +121,25 @@ function assignRolesRecommended(playerNames: string[]): Player[] {
   }));
 }
 
+/**
+ * Assigns roles using custom user-defined configuration.
+ * Allows players to select specific special roles, then fills remaining
+ * slots with Mafia and Citizens in balanced proportions.
+ */
 function assignRolesCustom(playerNames: string[], customConfig: CustomRoleConfig): Player[] {
   const { selectedRoles, totalPlayers } = customConfig;
   const roles: Role[] = [...selectedRoles];
   
-  // Calculate remaining players after special roles
+  // Calculate how many slots remain after user-selected special roles
   const remainingPlayers = totalPlayers - selectedRoles.length;
   
-  // Distribute remaining between Mafia and Citizens
-  // At least 1 Mafia, prefer 1 Mafia per 4 total players
+  // Distribute remaining slots between Mafia and Citizens
+  // Ensure at least 1 Mafia, prefer ~1 Mafia per 4 total players for balance
   const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
   const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
   const numCitizens = remainingPlayers - numMafia;
   
-  // Add Mafia and Citizens
+  // Add calculated Mafia and Citizens to the role pool
   for (let i = 0; i < numMafia; i++) {
     roles.push(Role.MAFIA);
   }
@@ -116,12 +147,13 @@ function assignRolesCustom(playerNames: string[], customConfig: CustomRoleConfig
     roles.push(Role.CITIZEN);
   }
   
-  // Shuffle roles
+  // Shuffle the complete role array for random assignment
   for (let i = roles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [roles[i], roles[j]] = [roles[j], roles[i]];
   }
   
+  // Create player objects with shuffled role assignments
   return playerNames.map((name, index) => ({
     id: `player-${index}`,
     name,
@@ -133,8 +165,19 @@ function assignRolesCustom(playerNames: string[], customConfig: CustomRoleConfig
   }));
 }
 
+/**
+ * Checks current game state for win conditions.
+ * Returns the winning team/player or null if game should continue.
+ * 
+ * Win conditions:
+ * - Joker: Wins by being voted out (handled in day phase) or surviving alone
+ * - Town: Wins by eliminating all Mafia members
+ * - Mafia: Wins by equaling or outnumbering Town members
+ */
 function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null {
   const alivePlayers = players.filter(p => p.status === PlayerStatus.ALIVE);
+  
+  // Categorize alive players by team affiliation
   const aliveMafia = alivePlayers.filter(p => 
     p.role === Role.MAFIA || p.role === Role.GODFATHER || p.role === Role.HOOKER
   );
@@ -145,25 +188,32 @@ function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null
   );
   const aliveJoker = alivePlayers.find(p => p.role === Role.JOKER);
   
-  // Joker wins if they're the only one left or if they were voted out (handled elsewhere)
+  // Joker wins if they're the sole survivor (alternate win condition)
   if (aliveJoker && alivePlayers.length === 1) return 'Joker';
   
-  // Town wins if all mafia are eliminated
+  // Town wins by complete elimination of Mafia team
   if (aliveMafia.length === 0) return 'Town';
   
-  // Mafia wins if they equal or outnumber town
+  // Mafia wins by achieving voting majority (equal or greater than town)
   if (aliveMafia.length >= aliveTown.length) return 'Mafia';
   
+  // Game continues if no win condition is met
   return null;
 }
 
+/**
+ * Main game state reducer - handles all state transitions.
+ * Processes actions and returns new state based on game logic.
+ * Central hub for all game state modifications.
+ */
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'SELECT_GAME_MODE':
       return {
         ...state,
         gameMode: action.payload,
-        currentPhase: action.payload === GameMode.OFFLINE ? GamePhase.SETUP : GamePhase.SETUP, // Will be updated when online mode is implemented
+        // Both modes currently go to SETUP - online will be different when implemented
+        currentPhase: action.payload === GameMode.OFFLINE ? GamePhase.SETUP : GamePhase.SETUP,
       };
       
     case 'INITIALIZE_GAME':
