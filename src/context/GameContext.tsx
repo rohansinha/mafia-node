@@ -1,10 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult, AssignmentMode, CustomRoleConfig } from '@/types/game';
+import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult, AssignmentMode, CustomRoleConfig, GameMode } from '@/types/game';
 
 interface GameContextType {
   gameState: GameState;
+  selectGameMode: (mode: GameMode) => void;
   initializeGame: (playerNames: string[], mode?: AssignmentMode, customConfig?: CustomRoleConfig) => void;
   startGame: () => void;
   castVote: (voterId: string, targetId: string) => void;
@@ -20,6 +21,7 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 type GameAction =
+  | { type: 'SELECT_GAME_MODE'; payload: GameMode }
   | { type: 'INITIALIZE_GAME'; payload: { playerNames: string[]; mode?: AssignmentMode; customConfig?: CustomRoleConfig } }
   | { type: 'START_GAME' }
   | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }
@@ -33,7 +35,7 @@ type GameAction =
 
 const initialState: GameState = {
   players: [],
-  currentPhase: GamePhase.SETUP,
+  currentPhase: GamePhase.MODE_SELECTION,
   dayCount: 1,
   votes: {},
   nightActions: {},
@@ -157,6 +159,13 @@ function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null
 
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
+    case 'SELECT_GAME_MODE':
+      return {
+        ...state,
+        gameMode: action.payload,
+        currentPhase: action.payload === GameMode.OFFLINE ? GamePhase.SETUP : GamePhase.SETUP, // Will be updated when online mode is implemented
+      };
+      
     case 'INITIALIZE_GAME':
       const { playerNames, mode = AssignmentMode.RECOMMENDED, customConfig } = action.payload;
       let players: Player[];
@@ -323,6 +332,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, dispatch] = useReducer(gameReducer, initialState);
   
+  const selectGameMode = (mode: GameMode) => {
+    dispatch({ type: 'SELECT_GAME_MODE', payload: mode });
+  };
+  
   const initializeGame = (playerNames: string[], mode: AssignmentMode = AssignmentMode.RECOMMENDED, customConfig?: CustomRoleConfig) => {
     dispatch({ type: 'INITIALIZE_GAME', payload: { playerNames, mode, customConfig } });
   };
@@ -402,6 +415,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     <GameContext.Provider
       value={{
         gameState,
+        selectGameMode,
         initializeGame,
         startGame,
         castVote,

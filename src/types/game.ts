@@ -10,7 +10,13 @@ export enum Role {
   SILENCER = 'Silencer'
 }
 
+export enum GameMode {
+  OFFLINE = 'Offline',
+  ONLINE = 'Online'
+}
+
 export enum GamePhase {
+  MODE_SELECTION = 'Mode Selection',
   SETUP = 'Setup',
   DAY = 'Day',
   NIGHT = 'Night',
@@ -44,6 +50,7 @@ export interface CustomRoleConfig {
 }
 
 export interface GameState {
+  gameMode?: GameMode;
   players: Player[];
   currentPhase: GamePhase;
   dayCount: number;

@@ -1,13 +1,25 @@
 'use client';
 
 import { useGame } from '@/context/GameContext';
-import { GamePhase, PlayerStatus } from '@/types/game';
+import { GamePhase, PlayerStatus, GameMode } from '@/types/game';
+import GameModeSelection from '@/components/GameModeSelection';
+import OnlinePlay from '@/components/OnlinePlay';
 import DayPhase from '@/components/DayPhase';
 import NightPhase from '@/components/NightPhase';
 import GameOver from '@/components/GameOver';
 
 export default function GameBoard() {
   const { gameState, resetGame } = useGame();
+
+  // Handle mode selection phase
+  if (gameState.currentPhase === GamePhase.MODE_SELECTION) {
+    return <GameModeSelection />;
+  }
+
+  // Handle online play mode (placeholder)
+  if (gameState.gameMode === GameMode.ONLINE) {
+    return <OnlinePlay />;
+  }
 
   if (gameState.currentPhase === GamePhase.GAME_OVER) {
     return <GameOver />;

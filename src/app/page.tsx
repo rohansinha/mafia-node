@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useGame } from '@/context/GameContext';
-import { GamePhase } from '@/types/game';
+import { GamePhase, GameMode } from '@/types/game';
 import SetupPhase from '@/components/SetupPhase';
 import GameBoard from '@/components/GameBoard';
 
@@ -17,7 +17,7 @@ export default function Home() {
           <p className="text-gray-300">Digital party game for groups</p>
         </div>
 
-        {gameState.currentPhase === GamePhase.SETUP ? (
+        {gameState.currentPhase === GamePhase.SETUP && gameState.gameMode === GameMode.OFFLINE ? (
           <SetupPhase />
         ) : (
           <GameBoard />
