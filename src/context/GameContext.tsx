@@ -8,10 +8,11 @@ interface GameContextType {
   initializeGame: (playerNames: string[], mode?: AssignmentMode, customConfig?: CustomRoleConfig) => void;
   startGame: () => void;
   castVote: (voterId: string, targetId: string) => void;
-  submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate') => void;
+  submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock') => void;
   nextPhase: () => void;
   nextPlayer: () => void;
   resetGame: () => void;
+  kamikazeRevenge: (targetId: string) => void;
   calculateVoteResult: () => VoteResult;
   getAvailableCustomRoles: () => Role[];
 }
@@ -22,10 +23,11 @@ type GameAction =
   | { type: 'INITIALIZE_GAME'; payload: { playerNames: string[]; mode?: AssignmentMode; customConfig?: CustomRoleConfig } }
   | { type: 'START_GAME' }
   | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }
-  | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' } }
+  | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' } }
   | { type: 'NEXT_PHASE' }
   | { type: 'NEXT_PLAYER' }
   | { type: 'ELIMINATE_PLAYER'; payload: string }
+  | { type: 'KAMIKAZE_REVENGE'; payload: string }
   | { type: 'RESET_GAME' }
   | { type: 'SET_WINNER'; payload: 'Mafia' | 'Town' | 'Joker' };
 
@@ -195,12 +197,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       
       let newNightActions = { ...state.nightActions };
       
-      if (actionType === 'kill' && player.role === Role.MAFIA) {
-        newNightActions.mafiaTarget = targetId;
+      if (actionType === 'kill') {
+        if (player.role === Role.MAFIA) {
+          newNightActions.mafiaTarget = targetId;
+        } else if (player.role === Role.GODFATHER) {
+          newNightActions.godfatherTarget = targetId;
+        }
       } else if (actionType === 'protect' && player.role === Role.DOCTOR) {
         newNightActions.doctorTarget = targetId;
       } else if (actionType === 'investigate' && player.role === Role.DETECTIVE) {
         newNightActions.detectiveTarget = targetId;
+      } else if (actionType === 'silence' && player.role === Role.SILENCER) {
+        newNightActions.silencerTarget = targetId;
+      } else if (actionType === 'roleblock' && player.role === Role.HOOKER) {
+        newNightActions.hookerTarget = targetId;
       }
       
       return {
@@ -218,6 +228,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ),
       };
       
+    case 'KAMIKAZE_REVENGE':
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id === action.payload
+            ? { ...p, status: PlayerStatus.ELIMINATED }
+            : p
+        ),
+      };
+      
     case 'NEXT_PHASE':
       let newPhase = state.currentPhase;
       let newDayCount = state.dayCount;
@@ -225,20 +245,52 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       
       if (state.currentPhase === GamePhase.DAY) {
         newPhase = GamePhase.NIGHT;
+        
+        // Clear silencing effects from previous day
+        newPlayers = newPlayers.map(p => ({
+          ...p,
+          isSilenced: false,
+          isRoleblocked: false
+        }));
+        
       } else if (state.currentPhase === GamePhase.NIGHT) {
         newPhase = GamePhase.DAY;
         newDayCount += 1;
         
         // Process night actions
-        const { mafiaTarget, doctorTarget } = state.nightActions;
+        const { 
+          mafiaTarget, 
+          godfatherTarget, 
+          doctorTarget, 
+          detectiveTarget,
+          silencerTarget,
+          hookerTarget 
+        } = state.nightActions;
         
-        if (mafiaTarget && mafiaTarget !== doctorTarget) {
+        // Apply roleblocking first
+        const roleblockTargets = hookerTarget ? [hookerTarget] : [];
+        
+        // Apply silencing for next day
+        if (silencerTarget) {
           newPlayers = newPlayers.map(p =>
-            p.id === mafiaTarget
+            p.id === silencerTarget
+              ? { ...p, isSilenced: true }
+              : p
+          );
+        }
+        
+        // Process kills (Mafia or Godfather)
+        const killTarget = godfatherTarget || mafiaTarget;
+        if (killTarget && killTarget !== doctorTarget) {
+          newPlayers = newPlayers.map(p =>
+            p.id === killTarget
               ? { ...p, status: PlayerStatus.ELIMINATED }
               : p
           );
         }
+        
+        // Detective investigation results could be processed here
+        // For now, we'll handle this in the UI
       }
       
       const winner = checkWinCondition(newPlayers);
@@ -283,7 +335,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CAST_VOTE', payload: { voterId, targetId } });
   };
   
-  const submitNightAction = (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate') => {
+  const submitNightAction = (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock') => {
     dispatch({ type: 'NIGHT_ACTION', payload: { playerId, targetId, actionType } });
   };
   
@@ -297,6 +349,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   
   const resetGame = () => {
     dispatch({ type: 'RESET_GAME' });
+  };
+  
+  const kamikazeRevenge = (targetId: string) => {
+    dispatch({ type: 'KAMIKAZE_REVENGE', payload: targetId });
   };
   
   const calculateVoteResult = (): VoteResult => {
@@ -353,6 +409,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         nextPhase,
         nextPlayer,
         resetGame,
+        kamikazeRevenge,
         calculateVoteResult,
         getAvailableCustomRoles,
       }}
