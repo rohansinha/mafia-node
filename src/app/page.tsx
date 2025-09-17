@@ -1,3 +1,8 @@
+/**
+ * Main application page that serves as the entry point for the Mafia game.
+ * Handles the top-level routing between Setup Phase (for offline mode) and GameBoard.
+ * Provides the main layout with gradient background and title.
+ */
 'use client';
 
 import { useState } from 'react';
@@ -17,6 +22,7 @@ export default function Home() {
           <p className="text-gray-300">Digital party game for groups</p>
         </div>
 
+        {/* Route to SetupPhase only for offline mode, otherwise GameBoard handles all phases */}
         {gameState.currentPhase === GamePhase.SETUP && gameState.gameMode === GameMode.OFFLINE ? (
           <SetupPhase />
         ) : (
