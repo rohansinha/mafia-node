@@ -17,6 +17,11 @@ export enum GamePhase {
   GAME_OVER = 'Game Over'
 }
 
+export enum AssignmentMode {
+  RECOMMENDED = 'Recommended',
+  CUSTOM = 'Custom'
+}
+
 export enum PlayerStatus {
   ALIVE = 'Alive',
   ELIMINATED = 'Eliminated',
@@ -31,6 +36,11 @@ export interface Player {
   isRevealed: boolean;
   isSilenced?: boolean;
   isRoleblocked?: boolean;
+}
+
+export interface CustomRoleConfig {
+  selectedRoles: Role[]; // Roles selected by user (excluding CITIZEN and MAFIA)
+  totalPlayers: number;
 }
 
 export interface GameState {
@@ -49,6 +59,8 @@ export interface GameState {
   };
   winner?: 'Mafia' | 'Town' | 'Joker';
   currentPlayerIndex: number; // For passing device around
+  assignmentMode?: AssignmentMode;
+  customRoleConfig?: CustomRoleConfig;
 }
 
 export interface VoteResult {

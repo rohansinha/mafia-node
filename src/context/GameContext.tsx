@@ -1,11 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult } from '@/types/game';
+import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult, AssignmentMode, CustomRoleConfig } from '@/types/game';
 
 interface GameContextType {
   gameState: GameState;
-  initializeGame: (playerNames: string[]) => void;
+  initializeGame: (playerNames: string[], mode?: AssignmentMode, customConfig?: CustomRoleConfig) => void;
   startGame: () => void;
   castVote: (voterId: string, targetId: string) => void;
   submitNightAction: (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate') => void;
@@ -13,12 +13,13 @@ interface GameContextType {
   nextPlayer: () => void;
   resetGame: () => void;
   calculateVoteResult: () => VoteResult;
+  getAvailableCustomRoles: () => Role[];
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 type GameAction =
-  | { type: 'INITIALIZE_GAME'; payload: string[] }
+  | { type: 'INITIALIZE_GAME'; payload: { playerNames: string[]; mode?: AssignmentMode; customConfig?: CustomRoleConfig } }
   | { type: 'START_GAME' }
   | { type: 'CAST_VOTE'; payload: { voterId: string; targetId: string } }
   | { type: 'NIGHT_ACTION'; payload: { playerId: string; targetId: string; actionType: 'kill' | 'protect' | 'investigate' } }
@@ -37,7 +38,7 @@ const initialState: GameState = {
   currentPlayerIndex: 0,
 };
 
-function assignRoles(playerNames: string[]): Player[] {
+function assignRolesRecommended(playerNames: string[]): Player[] {
   const numPlayers = playerNames.length;
   const roles: Role[] = [];
   
@@ -90,6 +91,44 @@ function assignRoles(playerNames: string[]): Player[] {
   }));
 }
 
+function assignRolesCustom(playerNames: string[], customConfig: CustomRoleConfig): Player[] {
+  const { selectedRoles, totalPlayers } = customConfig;
+  const roles: Role[] = [...selectedRoles];
+  
+  // Calculate remaining players after special roles
+  const remainingPlayers = totalPlayers - selectedRoles.length;
+  
+  // Distribute remaining between Mafia and Citizens
+  // At least 1 Mafia, prefer 1 Mafia per 4 total players
+  const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
+  const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+  const numCitizens = remainingPlayers - numMafia;
+  
+  // Add Mafia and Citizens
+  for (let i = 0; i < numMafia; i++) {
+    roles.push(Role.MAFIA);
+  }
+  for (let i = 0; i < numCitizens; i++) {
+    roles.push(Role.CITIZEN);
+  }
+  
+  // Shuffle roles
+  for (let i = roles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [roles[i], roles[j]] = [roles[j], roles[i]];
+  }
+  
+  return playerNames.map((name, index) => ({
+    id: `player-${index}`,
+    name,
+    role: roles[index],
+    status: PlayerStatus.ALIVE,
+    isRevealed: false,
+    isSilenced: false,
+    isRoleblocked: false,
+  }));
+}
+
 function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null {
   const alivePlayers = players.filter(p => p.status === PlayerStatus.ALIVE);
   const aliveMafia = alivePlayers.filter(p => 
@@ -117,9 +156,20 @@ function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'INITIALIZE_GAME':
+      const { playerNames, mode = AssignmentMode.RECOMMENDED, customConfig } = action.payload;
+      let players: Player[];
+      
+      if (mode === AssignmentMode.CUSTOM && customConfig) {
+        players = assignRolesCustom(playerNames, customConfig);
+      } else {
+        players = assignRolesRecommended(playerNames);
+      }
+      
       return {
         ...initialState,
-        players: assignRoles(action.payload),
+        players,
+        assignmentMode: mode,
+        customRoleConfig: customConfig,
       };
       
     case 'START_GAME':
@@ -221,8 +271,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, dispatch] = useReducer(gameReducer, initialState);
   
-  const initializeGame = (playerNames: string[]) => {
-    dispatch({ type: 'INITIALIZE_GAME', payload: playerNames });
+  const initializeGame = (playerNames: string[], mode: AssignmentMode = AssignmentMode.RECOMMENDED, customConfig?: CustomRoleConfig) => {
+    dispatch({ type: 'INITIALIZE_GAME', payload: { playerNames, mode, customConfig } });
   };
   
   const startGame = () => {
@@ -280,6 +330,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
     };
   };
   
+  const getAvailableCustomRoles = (): Role[] => {
+    return [
+      Role.DETECTIVE,
+      Role.DOCTOR,
+      Role.SILENCER,
+      Role.KAMIKAZE,
+      Role.JOKER,
+      Role.GODFATHER,
+      Role.HOOKER
+    ];
+  };
+
   return (
     <GameContext.Provider
       value={{
@@ -292,6 +354,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         nextPlayer,
         resetGame,
         calculateVoteResult,
+        getAvailableCustomRoles,
       }}
     >
       {children}
