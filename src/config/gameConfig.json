@@ -1,0 +1,63 @@
+{
+  "game": {
+    "timing": {
+      "nightActionTime": 60,
+      "discussionTime": 300,
+      "votingTime": 45,
+      "resultsDisplayTime": 10,
+      "roleRevealTime": 15,
+      "kamikazeRevengeTime": 30,
+      "transitionDelay": 2000
+    },
+    "players": {
+      "minPlayers": 4,
+      "maxPlayers": 20
+    },
+    "features": {
+      "enableDevicePassingConfirmations": true,
+      "showRoleHints": true,
+      "enableAnimations": true,
+      "autoAdvancePhases": false,
+      "skipConfirmations": false,
+      "showTimers": true
+    }
+  },
+  "logging": {
+    "enableApplicationInsights": true,
+    "logUserActions": true,
+    "logGameEvents": true,
+    "logExceptions": true,
+    "logMetrics": true,
+    "logSessionAnalytics": true,
+    "enableConsoleLogging": true,
+    "consoleLogLevel": "info"
+  },
+  "ui": {
+    "theme": "dark",
+    "animationDuration": 300,
+    "enableHapticFeedback": true,
+    "fontSizeMultiplier": 1.0,
+    "highContrastMode": false
+  },
+  "environment": {
+    "development": {
+      "timing": {
+        "nightActionTime": 20,
+        "discussionTime": 60,
+        "votingTime": 15
+      },
+      "logging": {
+        "enableApplicationInsights": false,
+        "consoleLogLevel": "debug"
+      }
+    },
+    "production": {
+      "logging": {
+        "enableConsoleLogging": false,
+        "consoleLogLevel": "error"
+      }
+    }
+  },
+  "version": "1.0.0",
+  "description": "Mafia Game Configuration - Controls timing, features, and logging settings"
+}
