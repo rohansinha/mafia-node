@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "./node_modules/.bin/next start",
+    "lint": "next lint",
+    "azure:build": "npm install && npm run build",
+    "azure:start": "npm start"
   },
   "dependencies": {
     "@microsoft/applicationinsights-web": "^3.3.9",
@@ -24,5 +26,9 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }
