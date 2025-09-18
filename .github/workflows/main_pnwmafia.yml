@@ -104,6 +104,8 @@ jobs:
           ls -la deployment/.next/ || echo "No .next directory found"
           echo "📁 Standalone directory:"
           ls -la deployment/.next/standalone/ || echo "No standalone directory found"
+          echo "📁 Checking server.js specifically:"
+          test -f deployment/.next/standalone/server.js && echo "✅ server.js found in deployment" || echo "❌ server.js NOT found in deployment"
           echo "📁 Static directory:"
           ls -la deployment/.next/static/ || echo "No static directory found"
           
@@ -130,9 +132,20 @@ jobs:
           
       - name: List deployment files
         run: |
+          echo "📁 Current working directory:"
+          pwd
           echo "📁 Deployment package contents:"
-          find . -type f -name "*.js" -o -name "*.json" | head -20
-          ls -la || echo "Could not list files"
+          ls -la
+          echo "📁 Checking for .next directory:"
+          ls -la .next/ || echo "❌ .next directory not found"
+          echo "📁 Checking for standalone directory:"
+          ls -la .next/standalone/ || echo "❌ .next/standalone directory not found"
+          echo "📁 Checking for server.js:"
+          ls -la .next/standalone/server.js || echo "❌ server.js not found"
+          echo "📁 All JavaScript files in deployment:"
+          find . -name "*.js" -type f
+          echo "📁 Package.json start script:"
+          grep -A 2 -B 2 '"start"' package.json || echo "❌ Could not find start script"
       
       - name: Login to Azure
         uses: azure/login@v2
