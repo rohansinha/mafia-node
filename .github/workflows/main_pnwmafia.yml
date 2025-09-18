@@ -80,6 +80,13 @@ jobs:
           if [ -d ".next" ]; then
             cp -r .next deployment/next-build
             echo "✅ Complete .next directory copied as next-build"
+            
+            # Also handle the nested .next directory inside standalone (if it exists)
+            if [ -d ".next/standalone/.next" ]; then
+              mkdir -p deployment/next-build/standalone/next-build-inner
+              cp -r .next/standalone/.next/* deployment/next-build/standalone/next-build-inner/
+              echo "✅ Standalone's internal .next copied as next-build-inner"
+            fi
           fi
           
           # Copy package.json to deployment root
@@ -136,6 +143,13 @@ jobs:
           if [ -d "next-build" ]; then
             mv next-build .next
             echo "✅ Renamed next-build back to .next"
+            
+            # Restore the standalone's internal .next directory
+            if [ -d ".next/standalone/next-build-inner" ]; then
+              echo "� Restoring standalone's internal .next directory..."
+              mv .next/standalone/next-build-inner .next/standalone/.next
+              echo "✅ Restored standalone's internal .next directory"
+            fi
           else
             echo "❌ next-build directory not found"
             exit 1
