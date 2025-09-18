@@ -87,6 +87,13 @@ jobs:
               cp -r .next/standalone/.next/* deployment/next-build/standalone/next-build-inner/
               echo "✅ Standalone's internal .next copied as next-build-inner"
             fi
+            
+            # Ensure static assets are available for standalone server
+            if [ -d ".next/static" ]; then
+              mkdir -p deployment/next-build/standalone/next-build-inner/static
+              cp -r .next/static/* deployment/next-build/standalone/next-build-inner/static/
+              echo "✅ Static assets copied to standalone directory"
+            fi
           fi
           
           # Copy package.json to deployment root
@@ -96,12 +103,6 @@ jobs:
           if [ -d "public" ]; then
             cp -r public deployment/public
             echo "✅ Public assets copied to deployment/public"
-          fi
-          
-          # Copy web.config for IIS optimization
-          if [ -f "web.config" ]; then
-            cp web.config deployment/
-            echo "✅ web.config copied"
           fi
           
           # Verify the deployment structure
