@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node server.js",
-    "start:standalone": "node .next/standalone/server.js",
+    "start": "node .next/standalone/server.js",
+    "start:production": "node server.js",
     "lint": "next lint",
     "azure:build": "npm install && npm run build",
     "azure:start": "npm start"

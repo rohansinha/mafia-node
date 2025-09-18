@@ -76,17 +76,14 @@ jobs:
           # Create a clean deployment directory
           mkdir -p deployment
           
-          # Copy the standalone server and its dependencies to deployment root
-          cp -r .next/standalone/* deployment/
-          
-          # Ensure the .next directory structure exists in deployment
-          mkdir -p deployment/.next
-          
-          # Copy static assets to the correct location in deployment
-          if [ -d ".next/static" ]; then
-            cp -r .next/static deployment/.next/static
-            echo "✅ Static assets copied to deployment/.next/static"
+          # Copy the complete .next directory structure to deployment
+          if [ -d ".next" ]; then
+            cp -r .next deployment/.next
+            echo "✅ Complete .next directory copied"
           fi
+          
+          # Copy package.json to deployment root
+          cp package.json deployment/
           
           # Copy public assets if they exist
           if [ -d "public" ]; then
@@ -105,6 +102,8 @@ jobs:
           ls -la deployment/
           echo "📁 .next directory in deployment:"
           ls -la deployment/.next/ || echo "No .next directory found"
+          echo "📁 Standalone directory:"
+          ls -la deployment/.next/standalone/ || echo "No standalone directory found"
           echo "📁 Static directory:"
           ls -la deployment/.next/static/ || echo "No static directory found"
           
@@ -142,6 +141,17 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F96921C6B90C43429CFC8D8FDD8F0400 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_68A2D53E495F488FB8D9E4908F939960 }}
 
+      - name: Stop Azure Web App
+        run: |
+          echo "🛑 Stopping Azure Web App to ensure clean deployment..."
+          az webapp stop --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) || echo "⚠️ Could not stop app (may already be stopped)"
+
+      - name: Clean App Service deployment
+        run: |
+          echo "🧹 Cleaning previous deployment files..."
+          # Delete all files in the wwwroot directory to ensure clean deployment
+          az webapp deployment source delete --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) || echo "⚠️ Could not clean deployment history"
+          
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
@@ -149,15 +159,35 @@ jobs:
           app-name: 'PnwMafia'
           slot-name: 'Production'
           package: .
+          clean: true
           
-      - name: Verify deployment
+      - name: Start Azure Web App
+        run: |
+          echo "🚀 Starting Azure Web App..."
+          az webapp start --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv)
+          
+      - name: Verify deployment and health
         run: |
           echo "🚀 Deployment completed"
           echo "⏳ Waiting for application to start..."
-          sleep 30
+          sleep 60
+          
+          echo "🔍 Checking app service status..."
+          az webapp show --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) --query "state" -o tsv
+          
+          echo "📋 Checking application logs for any startup errors..."
+          az webapp log tail --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) --timeout 30 || echo "⚠️ Could not retrieve logs"
           
           echo "🔍 Testing health endpoint..."
-          curl -f https://pnwmafia.azurewebsites.net/api/health || echo "⚠️ Health check failed - app may still be starting"
+          for i in {1..5}; do
+            if curl -f https://pnwmafia.azurewebsites.net/api/health; then
+              echo "✅ Health check passed on attempt $i"
+              break
+            else
+              echo "⚠️ Health check failed on attempt $i, retrying in 15 seconds..."
+              sleep 15
+            fi
+          done
           
           echo "🌐 Application should be available at: https://pnwmafia.azurewebsites.net"
           
