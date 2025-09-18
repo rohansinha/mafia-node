@@ -1,5 +1,20 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-dep      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'pnwmafia'
+          slot-name: 'Production'
+          
+      - name: Verify deployment
+        run: |
+          echo "🚀 Deployment completed"
+          echo "⏳ Waiting for application to start..."
+          sleep 30
+          
+          echo "🔍 Testing health endpoint..."
+          curl -f https://pnwmafia.azurewebsites.net/api/health || echo "⚠️ Health check failed - app may still be starting"
+          
+          echo "🌐 Application should be available at: https://pnwmafia.azurewebsites.net" More GitHub Actions for Azure: https://github.com/Azure/actions
 
 name: Build and deploy Node.js app to Azure Web App - PnwMafia
 

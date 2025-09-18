@@ -9,30 +9,45 @@
  * - Custom event logging for game actions
  * - Performance monitoring
  * - User session tracking
+ * - Configurable logging based on game configuration
  */
 
 import { ApplicationInsights } from '@microsoft/applicationinsights-web';
+import { gameConfig, configUtils } from '@/config/configManager';
 
-// Initialize Application Insights if connection string is available
+// Initialize Application Insights if connection string is available and logging is enabled
 let appInsights: ApplicationInsights | null = null;
 
-if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING) {
-  appInsights = new ApplicationInsights({
-    config: {
-      connectionString: process.env.NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING,
-      enableAutoRouteTracking: true,
-      enableCorsCorrelation: true,
-      enableRequestHeaderTracking: true,
-      enableResponseHeaderTracking: true,
-    },
-  });
+try {
+  if (typeof window !== 'undefined' && 
+      gameConfig.logging.enableApplicationInsights &&
+      process.env.NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING) {
+    appInsights = new ApplicationInsights({
+      config: {
+        connectionString: process.env.NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING,
+        enableAutoRouteTracking: true,
+        enableCorsCorrelation: true,
+        enableRequestHeaderTracking: true,
+        enableResponseHeaderTracking: true,
+      },
+    });
 
-  appInsights.loadAppInsights();
-  appInsights.trackPageView(); // Initial page view
-  
-  console.log('✅ Application Insights initialized successfully');
-} else if (typeof window !== 'undefined') {
-  console.log('⚠️ Application Insights connection string not found');
+    appInsights.loadAppInsights();
+    appInsights.trackPageView(); // Initial page view
+    
+    if (configUtils.shouldLogToConsole('info')) {
+      console.log('✅ Application Insights initialized successfully');
+    }
+  } else if (typeof window !== 'undefined' && configUtils.shouldLogToConsole('info')) {
+    if (!gameConfig.logging.enableApplicationInsights) {
+      console.log('ℹ️ Application Insights disabled by configuration');
+    } else {
+      console.log('⚠️ Application Insights connection string not found');
+    }
+  }
+} catch (error) {
+  console.error('❌ Failed to initialize Application Insights:', error);
+  appInsights = null;
 }
 
 /**
@@ -43,7 +58,7 @@ export class GameLogger {
    * Log game events (role assignments, player actions, etc.)
    */
   static logGameEvent(eventName: string, properties: Record<string, any> = {}, metrics: Record<string, number> = {}) {
-    if (appInsights) {
+    if (configUtils.isLoggingEnabled('logGameEvents') && appInsights) {
       appInsights.trackEvent({
         name: `Game_${eventName}`,
         properties: {
@@ -54,15 +69,17 @@ export class GameLogger {
       });
     }
     
-    // Also log to console for development
-    console.log(`🎮 ${eventName}:`, properties);
+    // Console logging based on configuration
+    if (configUtils.shouldLogToConsole('info')) {
+      console.log(`🎮 ${eventName}:`, properties);
+    }
   }
 
   /**
    * Log exceptions with context
    */
   static logException(error: Error, context: Record<string, any> = {}) {
-    if (appInsights) {
+    if (configUtils.isLoggingEnabled('logExceptions') && appInsights) {
       appInsights.trackException({
         exception: error,
         properties: {
@@ -72,33 +89,39 @@ export class GameLogger {
       });
     }
     
-    // Also log to console
-    console.error('❌ Exception:', error.message, context);
+    // Console logging based on configuration
+    if (configUtils.shouldLogToConsole('error')) {
+      console.error('❌ Exception:', error.message, context);
+    }
   }
 
   /**
    * Log performance metrics
    */
   static logMetric(name: string, value: number, properties: Record<string, any> = {}) {
-    if (appInsights) {
+    if (configUtils.isLoggingEnabled('logMetrics') && appInsights) {
       appInsights.trackMetric({
         name: `Game_${name}`,
         average: value
       }, properties);
     }
     
-    console.log(`📊 Metric ${name}:`, value, properties);
+    if (configUtils.shouldLogToConsole('info')) {
+      console.log(`📊 Metric ${name}:`, value, properties);
+    }
   }
 
   /**
    * Log user actions for analytics
    */
   static logUserAction(action: string, userId: string, properties: Record<string, any> = {}) {
-    this.logGameEvent('UserAction', {
-      action,
-      userId,
-      ...properties
-    });
+    if (configUtils.isLoggingEnabled('logUserActions')) {
+      this.logGameEvent('UserAction', {
+        action,
+        userId,
+        ...properties
+      });
+    }
   }
 
   /**
@@ -111,10 +134,12 @@ export class GameLogger {
     duration?: number;
     winner?: string;
   }) {
-    this.logGameEvent('GameSession', sessionData, {
-      playerCount: sessionData.playerCount,
-      duration: sessionData.duration || 0
-    });
+    if (configUtils.isLoggingEnabled('logSessionAnalytics')) {
+      this.logGameEvent('GameSession', sessionData, {
+        playerCount: sessionData.playerCount,
+        duration: sessionData.duration || 0
+      });
+    }
   }
 }
 

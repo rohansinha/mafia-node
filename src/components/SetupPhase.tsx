@@ -23,6 +23,7 @@ import { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { AssignmentMode, Role } from '@/types/game';
 import { GameLogger } from '@/lib/logger';
+import { gameConfig, configUtils } from '@/config/configManager';
 
 export default function SetupPhase() {
   // Component state for managing setup flow
@@ -99,7 +100,10 @@ export default function SetupPhase() {
   const handleInitialize = () => {
     try {
       const validNames = playerNames.filter(name => name.trim() !== '');
-      if (validNames.length >= 4) {
+      const minPlayers = gameConfig.players.minPlayers;
+      const maxPlayers = gameConfig.players.maxPlayers;
+      
+      if (validNames.length >= minPlayers && validNames.length <= maxPlayers) {
         GameLogger.logGameEvent('SetupInitialize', {
           assignmentMode,
           playerCount: validNames.length,
@@ -115,8 +119,10 @@ export default function SetupPhase() {
         setStep('roles');  // Show role assignments before starting
       } else {
         GameLogger.logGameEvent('SetupError', { 
-          error: 'insufficient_players', 
-          playerCount: validNames.length 
+          error: validNames.length < minPlayers ? 'insufficient_players' : 'too_many_players',
+          playerCount: validNames.length,
+          minRequired: minPlayers,
+          maxAllowed: maxPlayers
         });
       }
     } catch (error) {
