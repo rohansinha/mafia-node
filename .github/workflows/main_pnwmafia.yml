@@ -72,33 +72,49 @@ jobs:
       - name: Prepare standalone deployment
         run: |
           echo "📦 Preparing standalone deployment package..."
-          # Copy static assets to standalone directory
+          
+          # Create a clean deployment directory
+          mkdir -p deployment
+          
+          # Copy the standalone server and its dependencies to deployment root
+          cp -r .next/standalone/* deployment/
+          
+          # Ensure the .next directory structure exists in deployment
+          mkdir -p deployment/.next
+          
+          # Copy static assets to the correct location in deployment
           if [ -d ".next/static" ]; then
-            cp -r .next/static .next/standalone/.next/static
-            echo "✅ Static assets copied"
+            cp -r .next/static deployment/.next/static
+            echo "✅ Static assets copied to deployment/.next/static"
           fi
+          
           # Copy public assets if they exist
           if [ -d "public" ]; then
-            cp -r public .next/standalone/public
-            echo "✅ Public assets copied"
+            cp -r public deployment/public
+            echo "✅ Public assets copied to deployment/public"
           fi
-          # Ensure package.json is available for Azure
-          cp package.json .next/standalone/
+          
           # Copy web.config for IIS optimization
           if [ -f "web.config" ]; then
-            cp web.config .next/standalone/
+            cp web.config deployment/
             echo "✅ web.config copied"
           fi
+          
+          # Verify the deployment structure
+          echo "📁 Deployment structure:"
+          ls -la deployment/
+          echo "📁 .next directory in deployment:"
+          ls -la deployment/.next/ || echo "No .next directory found"
+          echo "📁 Static directory:"
+          ls -la deployment/.next/static/ || echo "No static directory found"
+          
           echo "✅ Standalone deployment package ready"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: |
-            .next/standalone/
-            .next/static/
-            public/
+          path: deployment/
 
   deploy:
     runs-on: ubuntu-latest
