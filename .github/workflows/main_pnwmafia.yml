@@ -157,13 +157,13 @@ jobs:
       - name: Stop Azure Web App
         run: |
           echo "🛑 Stopping Azure Web App to ensure clean deployment..."
-          az webapp stop --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) || echo "⚠️ Could not stop app (may already be stopped)"
+          az webapp stop --name PnwMafia --resource-group Mafia || echo "⚠️ Could not stop app (may already be stopped)"
 
       - name: Clean App Service deployment
         run: |
           echo "🧹 Cleaning previous deployment files..."
           # Delete all files in the wwwroot directory to ensure clean deployment
-          az webapp deployment source delete --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) || echo "⚠️ Could not clean deployment history"
+          az webapp deployment source delete --name PnwMafia --resource-group Mafia || echo "⚠️ Could not clean deployment history"
           
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
@@ -177,7 +177,7 @@ jobs:
       - name: Start Azure Web App
         run: |
           echo "🚀 Starting Azure Web App..."
-          az webapp start --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv)
+          az webapp start --name PnwMafia --resource-group Mafia
           
       - name: Verify deployment and health
         run: |
@@ -186,10 +186,10 @@ jobs:
           sleep 60
           
           echo "🔍 Checking app service status..."
-          az webapp show --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) --query "state" -o tsv
+          az webapp show --name PnwMafia --resource-group Mafia --query "state" -o tsv
           
           echo "📋 Checking application logs for any startup errors..."
-          az webapp log tail --name PnwMafia --resource-group $(az webapp show --name PnwMafia --query resourceGroup -o tsv) --timeout 30 || echo "⚠️ Could not retrieve logs"
+          az webapp log tail --name PnwMafia --resource-group Mafia --timeout 30 || echo "⚠️ Could not retrieve logs"
           
           echo "🔍 Testing health endpoint..."
           for i in {1..5}; do
