@@ -14,6 +14,7 @@
 
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { GameState, Player, GamePhase, Role, PlayerStatus, VoteResult, AssignmentMode, CustomRoleConfig, GameMode } from '@/types/game';
+import { GameLogger } from '@/lib/logger';
 
 // Interface defining all available game actions and state
 interface GameContextType {
@@ -188,14 +189,33 @@ function checkWinCondition(players: Player[]): 'Mafia' | 'Town' | 'Joker' | null
   );
   const aliveJoker = alivePlayers.find(p => p.role === Role.JOKER);
   
+  // Log win condition check
+  GameLogger.logGameEvent('WinConditionCheck', {
+    totalAlive: alivePlayers.length,
+    aliveMafia: aliveMafia.length,
+    aliveTown: aliveTown.length,
+    aliveJoker: !!aliveJoker,
+    mafiaMembers: aliveMafia.map(p => ({ id: p.id, role: p.role })),
+    townMembers: aliveTown.map(p => ({ id: p.id, role: p.role }))
+  });
+  
   // Joker wins if they're the sole survivor (alternate win condition)
-  if (aliveJoker && alivePlayers.length === 1) return 'Joker';
+  if (aliveJoker && alivePlayers.length === 1) {
+    GameLogger.logGameEvent('GameWon', { winner: 'Joker', winCondition: 'sole_survivor' });
+    return 'Joker';
+  }
   
   // Town wins by complete elimination of Mafia team
-  if (aliveMafia.length === 0) return 'Town';
+  if (aliveMafia.length === 0) {
+    GameLogger.logGameEvent('GameWon', { winner: 'Town', winCondition: 'mafia_eliminated' });
+    return 'Town';
+  }
   
   // Mafia wins by achieving voting majority (equal or greater than town)
-  if (aliveMafia.length >= aliveTown.length) return 'Mafia';
+  if (aliveMafia.length >= aliveTown.length) {
+    GameLogger.logGameEvent('GameWon', { winner: 'Mafia', winCondition: 'voting_majority' });
+    return 'Mafia';
+  }
   
   // Game continues if no win condition is met
   return null;
@@ -383,70 +403,185 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, dispatch] = useReducer(gameReducer, initialState);
   
   const selectGameMode = (mode: GameMode) => {
-    dispatch({ type: 'SELECT_GAME_MODE', payload: mode });
+    try {
+      GameLogger.logUserAction('selectGameMode', 'system', { mode, playerCount: gameState.players.length });
+      dispatch({ type: 'SELECT_GAME_MODE', payload: mode });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'selectGameMode', mode });
+      throw error; // Re-throw to allow component to handle if needed
+    }
   };
   
   const initializeGame = (playerNames: string[], mode: AssignmentMode = AssignmentMode.RECOMMENDED, customConfig?: CustomRoleConfig) => {
-    dispatch({ type: 'INITIALIZE_GAME', payload: { playerNames, mode, customConfig } });
+    try {
+      GameLogger.logGameEvent('InitializeGame', { 
+        playerCount: playerNames.length, 
+        assignmentMode: mode,
+        hasCustomConfig: !!customConfig 
+      });
+      dispatch({ type: 'INITIALIZE_GAME', payload: { playerNames, mode, customConfig } });
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'initializeGame', 
+        playerCount: playerNames.length, 
+        mode 
+      });
+      throw error;
+    }
   };
   
   const startGame = () => {
-    dispatch({ type: 'START_GAME' });
+    try {
+      GameLogger.logGameEvent('StartGame', { 
+        playerCount: gameState.players.length,
+        gameMode: gameState.gameMode,
+        phase: gameState.currentPhase 
+      });
+      dispatch({ type: 'START_GAME' });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'startGame' });
+      throw error;
+    }
   };
   
   const castVote = (voterId: string, targetId: string) => {
-    dispatch({ type: 'CAST_VOTE', payload: { voterId, targetId } });
+    try {
+      GameLogger.logUserAction('castVote', voterId, { 
+        targetId, 
+        phase: gameState.currentPhase,
+        dayCount: gameState.dayCount 
+      });
+      dispatch({ type: 'CAST_VOTE', payload: { voterId, targetId } });
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'castVote', 
+        voterId, 
+        targetId 
+      });
+      throw error;
+    }
   };
   
   const submitNightAction = (playerId: string, targetId: string, actionType: 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock') => {
-    dispatch({ type: 'NIGHT_ACTION', payload: { playerId, targetId, actionType } });
+    try {
+      GameLogger.logUserAction('nightAction', playerId, { 
+        targetId, 
+        actionType, 
+        phase: gameState.currentPhase,
+        dayCount: gameState.dayCount 
+      });
+      dispatch({ type: 'NIGHT_ACTION', payload: { playerId, targetId, actionType } });
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'submitNightAction', 
+        playerId, 
+        targetId, 
+        actionType 
+      });
+      throw error;
+    }
   };
   
   const nextPhase = () => {
-    dispatch({ type: 'NEXT_PHASE' });
+    try {
+      GameLogger.logGameEvent('PhaseTransition', { 
+        fromPhase: gameState.currentPhase,
+        dayCount: gameState.dayCount,
+        playerCount: gameState.players.filter(p => p.status === 'Alive').length
+      });
+      dispatch({ type: 'NEXT_PHASE' });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'nextPhase' });
+      throw error;
+    }
   };
   
   const nextPlayer = () => {
-    dispatch({ type: 'NEXT_PLAYER' });
+    try {
+      GameLogger.logGameEvent('NextPlayer', { 
+        currentPlayerIndex: gameState.currentPlayerIndex,
+        phase: gameState.currentPhase 
+      });
+      dispatch({ type: 'NEXT_PLAYER' });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'nextPlayer' });
+      throw error;
+    }
   };
   
   const resetGame = () => {
-    dispatch({ type: 'RESET_GAME' });
+    try {
+      GameLogger.logGameEvent('ResetGame', { 
+        previousPlayerCount: gameState.players.length,
+        previousPhase: gameState.currentPhase,
+        previousDayCount: gameState.dayCount 
+      });
+      dispatch({ type: 'RESET_GAME' });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'resetGame' });
+      throw error;
+    }
   };
   
   const kamikazeRevenge = (targetId: string) => {
-    dispatch({ type: 'KAMIKAZE_REVENGE', payload: targetId });
+    try {
+      GameLogger.logGameEvent('KamikazeRevenge', { 
+        targetId,
+        phase: gameState.currentPhase,
+        dayCount: gameState.dayCount 
+      });
+      dispatch({ type: 'KAMIKAZE_REVENGE', payload: targetId });
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'kamikazeRevenge', targetId });
+      throw error;
+    }
   };
   
   const calculateVoteResult = (): VoteResult => {
-    const voteCount: Record<string, number> = {};
-    const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
-    
-    // Count votes
-    Object.values(gameState.votes).forEach(targetId => {
-      voteCount[targetId] = (voteCount[targetId] || 0) + 1;
-    });
-    
-    // Find player with most votes
-    let maxVotes = 0;
-    let eliminatedPlayer: Player | undefined;
-    let isTie = false;
-    
-    Object.entries(voteCount).forEach(([playerId, votes]) => {
-      if (votes > maxVotes) {
-        maxVotes = votes;
-        eliminatedPlayer = gameState.players.find(p => p.id === playerId);
-        isTie = false;
-      } else if (votes === maxVotes && maxVotes > 0) {
-        isTie = true;
-      }
-    });
-    
-    return {
-      eliminatedPlayer: isTie ? undefined : eliminatedPlayer,
-      isTie,
-      voteCount,
-    };
+    try {
+      const voteCount: Record<string, number> = {};
+      const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
+      
+      // Count votes
+      Object.values(gameState.votes).forEach(targetId => {
+        voteCount[targetId] = (voteCount[targetId] || 0) + 1;
+      });
+      
+      // Find player with most votes
+      let maxVotes = 0;
+      let eliminatedPlayer: Player | undefined;
+      let isTie = false;
+      
+      Object.entries(voteCount).forEach(([playerId, votes]) => {
+        if (votes > maxVotes) {
+          maxVotes = votes;
+          eliminatedPlayer = gameState.players.find(p => p.id === playerId);
+          isTie = false;
+        } else if (votes === maxVotes && maxVotes > 0) {
+          isTie = true;
+        }
+      });
+
+      const result = {
+        eliminatedPlayer: isTie ? undefined : eliminatedPlayer,
+        isTie,
+        voteCount,
+      };
+
+      GameLogger.logGameEvent('VoteCalculated', {
+        totalVotes: Object.keys(gameState.votes).length,
+        eliminatedPlayerId: result.eliminatedPlayer?.id,
+        isTie: result.isTie,
+        maxVotes,
+        voteDistribution: voteCount,
+        dayCount: gameState.dayCount
+      });
+
+      return result;
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'calculateVoteResult' });
+      throw error;
+    }
   };
   
   const getAvailableCustomRoles = (): Role[] => {

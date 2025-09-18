@@ -22,6 +22,7 @@
 import { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { AssignmentMode, Role } from '@/types/game';
+import { GameLogger } from '@/lib/logger';
 
 export default function SetupPhase() {
   // Component state for managing setup flow
@@ -96,14 +97,34 @@ export default function SetupPhase() {
    * Initializes the game with validated player names and assignment mode
    */
   const handleInitialize = () => {
-    const validNames = playerNames.filter(name => name.trim() !== '');
-    if (validNames.length >= 4) {
-      if (assignmentMode === AssignmentMode.CUSTOM) {
-        initializeGame(validNames, assignmentMode, { selectedRoles, totalPlayers });
+    try {
+      const validNames = playerNames.filter(name => name.trim() !== '');
+      if (validNames.length >= 4) {
+        GameLogger.logGameEvent('SetupInitialize', {
+          assignmentMode,
+          playerCount: validNames.length,
+          hasCustomConfig: assignmentMode === AssignmentMode.CUSTOM,
+          selectedRoles: assignmentMode === AssignmentMode.CUSTOM ? selectedRoles : undefined
+        });
+
+        if (assignmentMode === AssignmentMode.CUSTOM) {
+          initializeGame(validNames, assignmentMode, { selectedRoles, totalPlayers });
+        } else {
+          initializeGame(validNames, assignmentMode);
+        }
+        setStep('roles');  // Show role assignments before starting
       } else {
-        initializeGame(validNames, assignmentMode);
+        GameLogger.logGameEvent('SetupError', { 
+          error: 'insufficient_players', 
+          playerCount: validNames.length 
+        });
       }
-      setStep('roles');  // Show role assignments before starting
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'handleInitialize',
+        assignmentMode,
+        playerCount: playerNames.length
+      });
     }
   };
 
@@ -111,7 +132,15 @@ export default function SetupPhase() {
    * Starts the actual game after role assignments are shown
    */
   const handleStartGame = () => {
-    startGame();
+    try {
+      GameLogger.logGameEvent('GameStartFromSetup', {
+        playerCount: gameState.players.length,
+        assignmentMode: gameState.assignmentMode
+      });
+      startGame();
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'handleStartGame' });
+    }
   };
 
   /**

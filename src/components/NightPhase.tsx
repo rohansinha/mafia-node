@@ -24,6 +24,7 @@
 import { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { Role, PlayerStatus } from '@/types/game';
+import { GameLogger } from '@/lib/logger';
 
 export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
@@ -85,17 +86,38 @@ export default function NightPhase() {
    * Submits the current role's action and progresses to next role
    */
   const handleSubmitAction = () => {
-    if (selectedTarget && selectedAction && currentRolePlayers[0]) {
-      submitNightAction(currentRolePlayers[0].id, selectedTarget, selectedAction);
-      
-      // Move to next role or end night phase
-      if (currentRoleIndex < activeRoles.length - 1) {
-        setCurrentRoleIndex(currentRoleIndex + 1);
-        setSelectedTarget('');
-        setSelectedAction(null);
-      } else {
-        nextPhase();
+    try {
+      if (selectedTarget && selectedAction && currentRolePlayers[0]) {
+        GameLogger.logUserAction('nightAction', currentRolePlayers[0].id, {
+          role: currentRole,
+          action: selectedAction,
+          targetId: selectedTarget,
+          dayCount: gameState.dayCount,
+          roleIndex: currentRoleIndex
+        });
+
+        submitNightAction(currentRolePlayers[0].id, selectedTarget, selectedAction);
+        
+        // Move to next role or end night phase
+        if (currentRoleIndex < activeRoles.length - 1) {
+          setCurrentRoleIndex(currentRoleIndex + 1);
+          setSelectedTarget('');
+          setSelectedAction(null);
+        } else {
+          GameLogger.logGameEvent('NightPhaseComplete', {
+            actionsCompleted: currentRoleIndex + 1,
+            dayCount: gameState.dayCount
+          });
+          nextPhase();
+        }
       }
+    } catch (error) {
+      GameLogger.logException(error as Error, {
+        action: 'handleSubmitAction',
+        currentRole,
+        selectedAction,
+        selectedTarget
+      });
     }
   };
 
@@ -103,12 +125,31 @@ export default function NightPhase() {
    * Skips the current role's action and progresses to next role
    */
   const handleSkipAction = () => {
-    if (currentRoleIndex < activeRoles.length - 1) {
-      setCurrentRoleIndex(currentRoleIndex + 1);
-      setSelectedTarget('');
-      setSelectedAction(null);
-    } else {
-      nextPhase();
+    try {
+      GameLogger.logUserAction('nightActionSkipped', currentRolePlayers[0]?.id || 'unknown', {
+        role: currentRole,
+        dayCount: gameState.dayCount,
+        roleIndex: currentRoleIndex
+      });
+
+      if (currentRoleIndex < activeRoles.length - 1) {
+        setCurrentRoleIndex(currentRoleIndex + 1);
+        setSelectedTarget('');
+        setSelectedAction(null);
+      } else {
+        GameLogger.logGameEvent('NightPhaseComplete', {
+          actionsCompleted: currentRoleIndex + 1,
+          dayCount: gameState.dayCount,
+          lastActionSkipped: true
+        });
+        nextPhase();
+      }
+    } catch (error) {
+      GameLogger.logException(error as Error, {
+        action: 'handleSkipAction',
+        currentRole,
+        currentRoleIndex
+      });
     }
   };
 

@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import { useGame } from '@/context/GameContext';
 import { PlayerStatus, Role } from '@/types/game';
+import { GameLogger } from '@/lib/logger';
 
 export default function DayPhase() {
   const { gameState, castVote, nextPhase, calculateVoteResult, kamikazeRevenge } = useGame();
@@ -40,10 +41,23 @@ export default function DayPhase() {
    * Handles vote submission for the current player
    */
   const handleCastVote = () => {
-    if (selectedTarget && currentPlayer) {
-      castVote(currentPlayer.id, selectedTarget);
-      setSelectedTarget('');
-      setShowVoting(false);
+    try {
+      if (selectedTarget && currentPlayer) {
+        GameLogger.logUserAction('dayVoteSubmitted', currentPlayer.id, {
+          targetId: selectedTarget,
+          voterRole: currentPlayer.role,
+          dayCount: gameState.dayCount
+        });
+        castVote(currentPlayer.id, selectedTarget);
+        setSelectedTarget('');
+        setShowVoting(false);
+      }
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'handleCastVote',
+        currentPlayerId: currentPlayer?.id,
+        selectedTarget
+      });
     }
   };
 
@@ -58,32 +72,61 @@ export default function DayPhase() {
    * Handles phase transition with special role logic
    */
   const handleNextPhase = () => {
-    const voteResult = calculateVoteResult();
-    
-    // Check if eliminated player is Kamikaze - triggers revenge mechanic
-    if (voteResult.eliminatedPlayer?.role === Role.KAMIKAZE) {
-      const otherPlayers = alivePlayers.filter(p => p.id !== voteResult.eliminatedPlayer?.id);
-      if (otherPlayers.length > 0) {
-        setShowKamikazeChoice(true);
-        return;
+    try {
+      const voteResult = calculateVoteResult();
+      
+      GameLogger.logGameEvent('DayPhaseEnd', {
+        voteResult: {
+          eliminatedPlayerId: voteResult.eliminatedPlayer?.id,
+          eliminatedPlayerRole: voteResult.eliminatedPlayer?.role,
+          isTie: voteResult.isTie,
+          totalVotes: Object.keys(gameState.votes).length
+        },
+        dayCount: gameState.dayCount
+      });
+      
+      // Check if eliminated player is Kamikaze - triggers revenge mechanic
+      if (voteResult.eliminatedPlayer?.role === Role.KAMIKAZE) {
+        const otherPlayers = alivePlayers.filter(p => p.id !== voteResult.eliminatedPlayer?.id);
+        if (otherPlayers.length > 0) {
+          GameLogger.logGameEvent('KamikazeRevengeTriggered', {
+            kamikazePlayerId: voteResult.eliminatedPlayer.id,
+            availableTargets: otherPlayers.length
+          });
+          setShowKamikazeChoice(true);
+          return;
+        }
       }
+      
+      // Joker instant win is handled in the game logic
+      nextPhase();
+      setShowResults(false);
+    } catch (error) {
+      GameLogger.logException(error as Error, { action: 'handleNextPhase' });
     }
-    
-    // Joker instant win is handled in the game logic
-    nextPhase();
-    setShowResults(false);
   };
 
   /**
    * Processes Kamikaze revenge kill and continues game
    */
   const handleKamikazeRevenge = () => {
-    if (kamikazeTarget) {
-      kamikazeRevenge(kamikazeTarget);
-      nextPhase();
-      setShowKamikazeChoice(false);
-      setShowResults(false);
-      setKamikazeTarget('');
+    try {
+      if (kamikazeTarget) {
+        GameLogger.logGameEvent('KamikazeRevengeExecuted', {
+          kamikazeTargetId: kamikazeTarget,
+          dayCount: gameState.dayCount
+        });
+        kamikazeRevenge(kamikazeTarget);
+        nextPhase();
+        setShowKamikazeChoice(false);
+        setShowResults(false);
+        setKamikazeTarget('');
+      }
+    } catch (error) {
+      GameLogger.logException(error as Error, { 
+        action: 'handleKamikazeRevenge',
+        kamikazeTarget
+      });
     }
   };
 
