@@ -173,7 +173,24 @@ jobs:
           slot-name: 'Production'
           package: .
           clean: true
-          
+      
+      - name: List deployment files again
+        run: |
+          echo "📁 Current working directory:"
+          pwd
+          echo "📁 Deployment package contents:"
+          ls -la
+          echo "📁 Checking for .next directory:"
+          ls -la .next/ || echo "❌ .next directory not found"
+          echo "📁 Checking for standalone directory:"
+          ls -la .next/standalone/ || echo "❌ .next/standalone directory not found"
+          echo "📁 Checking for server.js:"
+          ls -la .next/standalone/server.js || echo "❌ server.js not found"
+          echo "📁 All JavaScript files in deployment:"
+          find . -name "*.js" -type f
+          echo "📁 Package.json start script:"
+          grep -A 2 -B 2 '"start"' package.json || echo "❌ Could not find start script"
+
       - name: Start Azure Web App
         run: |
           echo "🚀 Starting Azure Web App..."
