@@ -76,10 +76,10 @@ jobs:
           # Create a clean deployment directory
           mkdir -p deployment
           
-          # Copy the complete .next directory structure to deployment
+          # Copy the complete .next directory structure to deployment (rename to avoid dotfile issues)
           if [ -d ".next" ]; then
-            cp -r .next deployment/.next
-            echo "✅ Complete .next directory copied"
+            cp -r .next deployment/next-build
+            echo "✅ Complete .next directory copied as next-build"
           fi
           
           # Copy package.json to deployment root
@@ -100,14 +100,14 @@ jobs:
           # Verify the deployment structure
           echo "📁 Deployment structure:"
           ls -la deployment/
-          echo "📁 .next directory in deployment:"
-          ls -la deployment/.next/ || echo "No .next directory found"
+          echo "📁 next-build directory in deployment:"
+          ls -la deployment/next-build/ || echo "No next-build directory found"
           echo "📁 Standalone directory:"
-          ls -la deployment/.next/standalone/ || echo "No standalone directory found"
+          ls -la deployment/next-build/standalone/ || echo "No standalone directory found"
           echo "📁 Checking server.js specifically:"
-          test -f deployment/.next/standalone/server.js && echo "✅ server.js found in deployment" || echo "❌ server.js NOT found in deployment"
+          test -f deployment/next-build/standalone/server.js && echo "✅ server.js found in deployment" || echo "❌ server.js NOT found in deployment"
           echo "📁 Static directory:"
-          ls -la deployment/.next/static/ || echo "No static directory found"
+          ls -la deployment/next-build/static/ || echo "No static directory found"
           
           echo "✅ Standalone deployment package ready"
 
@@ -129,6 +129,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+          
+      - name: Restore .next directory structure
+        run: |
+          echo "🔄 Restoring .next directory from next-build..."
+          if [ -d "next-build" ]; then
+            mv next-build .next
+            echo "✅ Renamed next-build back to .next"
+          else
+            echo "❌ next-build directory not found"
+            exit 1
+          fi
           
       - name: List deployment files
         run: |
