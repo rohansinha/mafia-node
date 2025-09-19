@@ -22,7 +22,7 @@ import { PlayerStatus, Role } from '@/types/game';
 import { GameLogger } from '@/lib/logger';
 
 export default function DayPhase() {
-  const { gameState, castVote, nextPhase, calculateVoteResult, kamikazeRevenge } = useGame();
+  const { gameState, castVote, nextPhase, nextPlayer, calculateVoteResult, kamikazeRevenge } = useGame();
   
   // Component state for UI flow management
   const [selectedTarget, setSelectedTarget] = useState<string>('');      // Currently selected vote target
@@ -34,7 +34,20 @@ export default function DayPhase() {
   // Filter players for different contexts
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
   const silencedPlayers = gameState.players.filter(p => p.isSilenced && p.status === PlayerStatus.ALIVE);
-  const currentPlayer = alivePlayers[gameState.currentPlayerIndex % alivePlayers.length];
+  
+  // Find the next player who hasn't voted yet
+  const getNextPlayerToVote = () => {
+    for (let i = 0; i < alivePlayers.length; i++) {
+      const playerIndex = (gameState.currentPlayerIndex + i) % alivePlayers.length;
+      const player = alivePlayers[playerIndex];
+      if (!gameState.votes[player.id]) {
+        return player;
+      }
+    }
+    return null; // All players have voted
+  };
+  
+  const currentPlayer = getNextPlayerToVote();
   const votingTargets = alivePlayers.filter(p => p.id !== currentPlayer?.id);
 
   /**
@@ -51,6 +64,9 @@ export default function DayPhase() {
         castVote(currentPlayer.id, selectedTarget);
         setSelectedTarget('');
         setShowVoting(false);
+        
+        // Move to the next player for voting
+        nextPlayer();
       }
     } catch (error) {
       GameLogger.logException(error as Error, { 

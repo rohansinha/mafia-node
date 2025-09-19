@@ -32,6 +32,11 @@ export default function SetupPhase() {
   const [playerNames, setPlayerNames] = useState<string[]>(['']);               // Player name inputs
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([]);              // Custom mode role selection
   const [totalPlayers, setTotalPlayers] = useState<number>(6);                 // Custom mode player count
+  
+  // State for player-by-player role revelation
+  const [currentRevealIndex, setCurrentRevealIndex] = useState(0);
+  const [showRole, setShowRole] = useState(false);
+  
   const { gameState, initializeGame, startGame, getAvailableCustomRoles } = useGame();
 
   /**
@@ -147,6 +152,34 @@ export default function SetupPhase() {
     } catch (error) {
       GameLogger.logException(error as Error, { action: 'handleStartGame' });
     }
+  };
+
+  /**
+   * Handles revealing the role to the current player
+   */
+  const handleRevealRole = () => {
+    setShowRole(true);
+  };
+
+  /**
+   * Moves to the next player's role revelation or starts the game if all are done
+   */
+  const handleNextPlayer = () => {
+    if (currentRevealIndex < gameState.players.length - 1) {
+      setCurrentRevealIndex(currentRevealIndex + 1);
+      setShowRole(false);
+    } else {
+      // All players have seen their roles, start the game
+      handleStartGame();
+    }
+  };
+
+  /**
+   * Resets role revelation to start over
+   */
+  const handleRestartRevelation = () => {
+    setCurrentRevealIndex(0);
+    setShowRole(false);
   };
 
   /**
@@ -309,17 +342,37 @@ export default function SetupPhase() {
           <div className="bg-white/5 rounded-lg p-4">
             <h4 className="text-white font-medium mb-2">Role Distribution Preview</h4>
             <div className="text-white/70 text-sm space-y-1">
-              <p>Selected roles: {selectedRoles.length}</p>
-              <p>Citizens: {Math.max(1, Math.floor(remainingSlots * 0.75))}</p>
-              <p>Mafia: {Math.max(1, Math.floor(remainingSlots * 0.25))}</p>
-              <p>Total: {totalPlayers}</p>
+              <p>Selected special roles: {selectedRoles.length}</p>
+              {(() => {
+                const remainingPlayers = totalPlayers - selectedRoles.length;
+                const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
+                const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+                const numCitizens = remainingPlayers - numMafia;
+                
+                return (
+                  <>
+                    <p>Citizens: {Math.max(0, numCitizens)}</p>
+                    <p>Mafia: {numMafia}</p>
+                    <p>Total: {totalPlayers}</p>
+                    {numCitizens < 0 && (
+                      <p className="text-red-400">⚠️ Too many roles selected! Remove {Math.abs(numCitizens)} role(s).</p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
 
         <button
           onClick={handleCustomRolesNext}
-          disabled={selectedRoles.length + 2 > totalPlayers}
+          disabled={(() => {
+            const remainingPlayers = totalPlayers - selectedRoles.length;
+            const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
+            const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+            const numCitizens = remainingPlayers - numMafia;
+            return numCitizens < 0;
+          })()}
           className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors"
         >
           Continue to Player Setup
@@ -328,43 +381,105 @@ export default function SetupPhase() {
     );
   }
 
-  // Role Display Screen
+  // Player-by-Player Role Revelation Screen
   if (step === 'roles' && gameState.players.length > 0) {
+    const currentPlayer = gameState.players[currentRevealIndex];
+    
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">Role Assignments</h2>
           <span className="text-white/60 text-sm">
-            {assignmentMode} Mode
+            Player {currentRevealIndex + 1} of {gameState.players.length}
           </span>
         </div>
         
-        <div className="space-y-3">
-          {gameState.players.map((player) => (
-            <div key={player.id} className="bg-white/5 rounded-lg p-4 border border-white/20">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold text-white mb-2">{player.name}</h3>
-                <div className={`inline-block px-4 py-2 rounded-full font-bold text-sm ${getRoleColor(player.role)}`}>
-                  {player.role}
-                </div>
-                <p className="text-white/70 text-sm mt-2">
-                  {getRoleDescription(player.role)}
-                </p>
+        {!showRole ? (
+          // Device passing screen - hide role until player is ready
+          <div className="text-center space-y-6">
+            <div className="bg-white/5 rounded-lg p-6 border border-white/20">
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Pass the device to:
+              </h3>
+              <div className="text-3xl font-bold text-purple-300 mb-4">
+                {currentPlayer.name}
+              </div>
+              <p className="text-white/70 text-sm">
+                Make sure only {currentPlayer.name} can see the screen, then reveal your role.
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <button
+                onClick={handleRevealRole}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg"
+              >
+                I'm {currentPlayer.name} - Show My Role
+              </button>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRestartRevelation}
+                  className="flex-1 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+                >
+                  Start Over
+                </button>
+                {currentRevealIndex > 0 && (
+                  <button
+                    onClick={() => setCurrentRevealIndex(currentRevealIndex - 1)}
+                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                  >
+                    Previous Player
+                  </button>
+                )}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          // Role reveal screen - shows the player's role and description
+          <div className="text-center space-y-6">
+            <div className="bg-white/5 rounded-lg p-6 border border-white/20">
+              <h3 className="text-xl font-semibold text-white mb-4">
+                {currentPlayer.name}, your role is:
+              </h3>
+              <div className={`inline-block px-6 py-3 rounded-full font-bold text-lg mb-4 ${getRoleColor(currentPlayer.role)}`}>
+                {currentPlayer.role}
+              </div>
+              <p className="text-white/70 text-sm">
+                {getRoleDescription(currentPlayer.role)}
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <button
+                onClick={handleNextPlayer}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg"
+              >
+                {currentRevealIndex < gameState.players.length - 1 ? 'Next Player' : 'Start Game'}
+              </button>
+              
+              <button
+                onClick={() => setShowRole(false)}
+                className="w-full py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+              >
+                Hide Role (Pass Device)
+              </button>
+            </div>
+          </div>
+        )}
         
-        <div className="text-center mt-6">
-          <p className="text-white/80 text-sm mb-4">
-            Show each player their role privately, then start the game!
-          </p>
-          <button
-            onClick={handleStartGame}
-            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg transition-colors"
-          >
-            Start Game
-          </button>
+        {/* Progress indicator */}
+        <div className="mt-6">
+          <div className="flex justify-between text-white/60 text-xs mb-2">
+            <span>Progress</span>
+            <span>{currentRevealIndex + 1} / {gameState.players.length}</span>
+          </div>
+          <div className="w-full bg-white/20 rounded-full h-2">
+            <div 
+              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${((currentRevealIndex + 1) / gameState.players.length) * 100}%` }}
+            ></div>
+          </div>
         </div>
       </div>
     );

@@ -247,10 +247,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
       
       return {
-        ...initialState,
+        ...state,
         players,
         assignmentMode: mode,
         customRoleConfig: customConfig,
+        currentPhase: GamePhase.SETUP,
+        dayCount: 1,
+        votes: {},
+        nightActions: {},
+        currentPlayerIndex: 0,
       };
       
     case 'START_GAME':
