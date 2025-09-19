@@ -414,7 +414,7 @@ export default function SetupPhase() {
                 onClick={handleRevealRole}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg"
               >
-                I'm {currentPlayer.name} - Show My Role
+                I&apos;m {currentPlayer.name} - Show My Role
               </button>
               
               <div className="flex gap-2">

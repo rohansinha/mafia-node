@@ -261,7 +261,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'START_GAME':
       return {
         ...state,
-        currentPhase: GamePhase.DAY,
+        currentPhase: GamePhase.NIGHT,
       };
       
     case 'CAST_VOTE':
