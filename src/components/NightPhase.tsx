@@ -30,11 +30,10 @@ export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
   
   // Component state for managing night action flow
-  const [selectedAction, setSelectedAction] = useState<'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string>('');     // Currently selected target
   const [currentRoleIndex, setCurrentRoleIndex] = useState(0);          // Index in the role order
   
-  // New state for device passing flow
+  // State for device passing flow
   const [nightStep, setNightStep] = useState<'eyes-closed' | 'role-turn' | 'action-selection'>('eyes-closed');
   const [showAction, setShowAction] = useState(false);
 
@@ -108,7 +107,6 @@ export default function NightPhase() {
     if (currentRoleIndex < activeRoles.length - 1) {
       setCurrentRoleIndex(currentRoleIndex + 1);
       setSelectedTarget('');
-      setSelectedAction(null);
       setShowAction(false);
       setNightStep('role-turn');
     } else {
@@ -125,25 +123,46 @@ export default function NightPhase() {
    */
   const handleSubmitAction = () => {
     try {
-      if (selectedTarget && selectedAction && currentRolePlayers[0]) {
+      const actionType = getActionTypeForRole(currentRole);
+      if (selectedTarget && actionType && currentRolePlayers[0]) {
         GameLogger.logUserAction('nightAction', currentRolePlayers[0].id, {
           role: currentRole,
-          action: selectedAction,
+          action: actionType,
           targetId: selectedTarget,
           dayCount: gameState.dayCount,
           roleIndex: currentRoleIndex
         });
 
-        submitNightAction(currentRolePlayers[0].id, selectedTarget, selectedAction);
+        submitNightAction(currentRolePlayers[0].id, selectedTarget, actionType);
         handleCompleteAction();
       }
     } catch (error) {
       GameLogger.logException(error as Error, {
         action: 'handleSubmitAction',
         currentRole,
-        selectedAction,
         selectedTarget
       });
+    }
+  };
+
+  /**
+   * Helper to get action type for a role
+   */
+  const getActionTypeForRole = (role: Role): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
+    switch (role) {
+      case Role.MAFIA:
+      case Role.GODFATHER:
+        return 'kill';
+      case Role.DOCTOR:
+        return 'protect';
+      case Role.DETECTIVE:
+        return 'investigate';
+      case Role.SILENCER:
+        return 'silence';
+      case Role.HOOKER:
+        return 'roleblock';
+      default:
+        return null;
     }
   };
 
@@ -265,26 +284,10 @@ export default function NightPhase() {
     );
   }
 
-  // Handle case where no night roles are alive
-  if (!currentRole || currentRolePlayers.length === 0) {
-    return (
-      <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
-        <h2 className="text-2xl font-bold text-white text-center">🌙 Night Phase</h2>
-        <p className="text-white/80 text-center">No active night roles. Moving to day phase...</p>
-        <button
-          onClick={nextPhase}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors"
-        >
-          Continue to Day Phase
-        </button>
-      </div>
-    );
-  }
-
   /**
    * Maps role to its corresponding action type
    */
-  const getActionType = (role: Role) => {
+  const getActionType = (role: Role): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
     switch (role) {
       case Role.MAFIA:
       case Role.GODFATHER:
@@ -305,7 +308,7 @@ export default function NightPhase() {
   /**
    * Gets user-friendly action description for each role
    */
-  const getActionDescription = (role: Role) => {
+  const getActionDescription = (role: Role): string => {
     switch (role) {
       case Role.MAFIA:
         return 'Choose someone to eliminate';
@@ -316,7 +319,7 @@ export default function NightPhase() {
       case Role.DETECTIVE:
         return 'Choose someone to investigate (you will learn their role)';
       case Role.SILENCER:
-        return 'Choose someone to silence during tomorrow\'s discussion';
+        return "Choose someone to silence during tomorrow's discussion";
       case Role.HOOKER:
         return 'Choose someone to roleblock (prevent their action)';
       default:
@@ -325,44 +328,22 @@ export default function NightPhase() {
   };
 
   /**
-   * Gets role-specific instructions for the player
-   */
-  const getRoleInstructions = (role: Role) => {
-    switch (role) {
-      case Role.MAFIA:
-        return 'As Mafia, eliminate threats to gain majority voting power.';
-      case Role.GODFATHER:
-        return 'As Godfather, eliminate threats. You cannot be detected or roleblocked.';
-      case Role.DOCTOR:
-        return 'As Doctor, save players from elimination. Choose wisely.';
-      case Role.DETECTIVE:
-        return 'As Detective, learn roles to identify the Mafia team.';
-      case Role.SILENCER:
-        return 'As Silencer, prevent players from speaking during day discussion.';
-      case Role.HOOKER:
-        return 'As Hooker, block other players\' night actions.';
-      default:
-        return 'Use your special ability to help your team win.';
-    }
-  };
-
-  /**
    * Gets role-specific color styling
    */
-  const getRoleColor = (role: Role) => {
+  const getRoleColor = (role: Role): string => {
     switch (role) {
       case Role.MAFIA:
       case Role.GODFATHER:
       case Role.HOOKER:
-        return 'bg-red-600/20 border-red-500';        // Red for Mafia team
+        return 'bg-red-600/20 border-red-500';
       case Role.DETECTIVE:
-        return 'bg-blue-600/20 border-blue-500';      // Blue for Detective
+        return 'bg-blue-600/20 border-blue-500';
       case Role.DOCTOR:
-        return 'bg-green-600/20 border-green-500';    // Green for Doctor
+        return 'bg-green-600/20 border-green-500';
       case Role.SILENCER:
-        return 'bg-purple-600/20 border-purple-500';  // Purple for Silencer
+        return 'bg-purple-600/20 border-purple-500';
       default:
-        return 'bg-gray-600/20 border-gray-500';      // Gray default
+        return 'bg-gray-600/20 border-gray-500';
     }
   };
 
@@ -382,4 +363,82 @@ export default function NightPhase() {
     );
   }
 
+  const actionType = getActionType(currentRole);
+  const currentRolePlayer = currentRolePlayers[0];
+
+  // Action selection screen - main night action interface
+  return (
+    <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-white">🌙 {currentRole}&apos;s Action</h2>
+        <span className="text-white/60 text-sm">
+          {currentRoleIndex + 1} of {activeRoles.length}
+        </span>
+      </div>
+
+      {/* Role info panel */}
+      <div className={`p-4 rounded-lg border ${getRoleColor(currentRole)}`}>
+        <h3 className="text-white font-semibold mb-2">{currentRolePlayer?.name}</h3>
+        <p className="text-white/80 text-sm">{getActionDescription(currentRole)}</p>
+      </div>
+
+      {/* Target selection */}
+      <div className="space-y-2">
+        <p className="text-white/70 text-sm">Select your target:</p>
+        {actionTargets.map((target) => (
+          <button
+            key={target.id}
+            onClick={() => setSelectedTarget(target.id)}
+            className={`w-full p-3 rounded-lg border-2 transition-colors text-left ${
+              selectedTarget === target.id
+                ? 'border-purple-500 bg-purple-600/30 text-white'
+                : 'border-white/30 bg-white/5 text-white/80 hover:bg-white/10'
+            }`}
+          >
+            {target.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-4">
+        <button
+          onClick={() => {
+            setShowAction(false);
+            setNightStep('role-turn');
+          }}
+          className="flex-1 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+        >
+          Back
+        </button>
+        <button
+          onClick={handleSkipAction}
+          className="flex-1 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
+        >
+          Skip
+        </button>
+        <button
+          onClick={() => actionType && handleSubmitAction()}
+          disabled={!selectedTarget || !actionType}
+          className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+        >
+          Confirm
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mt-4">
+        <div className="flex justify-between text-white/60 text-xs mb-2">
+          <span>Night Progress</span>
+          <span>{currentRoleIndex + 1} / {activeRoles.length}</span>
+        </div>
+        <div className="w-full bg-white/20 rounded-full h-2">
+          <div
+            className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${((currentRoleIndex + 1) / activeRoles.length) * 100}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
