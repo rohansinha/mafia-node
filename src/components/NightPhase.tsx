@@ -29,6 +29,10 @@ import { Role, PlayerStatus } from '@/types/game';
 import { GameLogger } from '@/lib/logger';
 import { MAFIA_TEAM_ROLES } from '@/constants/roles';
 import { useSpeech } from '@/hooks/useSpeech';
+import { gameConfig } from '@/config/configManager';
+
+// Get the night turn transition delay from config (default 5 seconds)
+const NIGHT_TURN_DELAY = gameConfig.timing.nightTurnTransitionDelay || 5000;
 
 export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
@@ -39,11 +43,12 @@ export default function NightPhase() {
   const [currentRoleIndex, setCurrentRoleIndex] = useState(0);          // Index in the role order
   
   // State for device passing flow
-  const [nightStep, setNightStep] = useState<'eyes-closed' | 'role-turn' | 'action-selection'>('eyes-closed');
+  const [nightStep, setNightStep] = useState<'eyes-closed' | 'transition' | 'role-turn' | 'action-selection'>('eyes-closed');
   const [showAction, setShowAction] = useState(false);
+  const [transitionCountdown, setTransitionCountdown] = useState(0);    // Countdown in seconds
   
   // Track if we've announced the current role (to avoid repeated announcements)
-  const hasAnnouncedRole = useRef(false);
+  const announcedRoleIndex = useRef(-1);
   const hasAnnouncedNightOpening = useRef(false);
 
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
@@ -78,19 +83,27 @@ export default function NightPhase() {
     ? alivePlayers.filter(p => p.role === Role.MAFIA || p.role === Role.GODFATHER)
     : alivePlayers.filter(p => p.role === currentRole);
     
-  // Speech announcement effect - announce when role turn changes
+  // Speech announcement effect - announce when entering role-turn for a NEW role
   useEffect(() => {
-    if (nightStep === 'role-turn' && !hasAnnouncedRole.current && currentRole) {
-      hasAnnouncedRole.current = true;
+    if (nightStep === 'role-turn' && currentRole && announcedRoleIndex.current !== currentRoleIndex) {
+      announcedRoleIndex.current = currentRoleIndex;
       const roleName = currentRole === 'MAFIA_TEAM' ? 'MAFIA_TEAM' : String(currentRole);
       speech.announceRoleTurn(roleName);
     }
-  }, [nightStep, currentRole, speech]);
+  }, [nightStep, currentRole, currentRoleIndex, speech]);
   
-  // Reset announcement flag when role index changes
+  // Transition countdown effect - wait before showing next role turn
   useEffect(() => {
-    hasAnnouncedRole.current = false;
-  }, [currentRoleIndex]);
+    if (nightStep === 'transition' && transitionCountdown > 0) {
+      const timer = setTimeout(() => {
+        setTransitionCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (nightStep === 'transition' && transitionCountdown === 0) {
+      // Transition complete, move to role turn
+      setNightStep('role-turn');
+    }
+  }, [nightStep, transitionCountdown]);
   
   // Announce night opening when entering eyes-closed phase
   useEffect(() => {
@@ -154,13 +167,17 @@ export default function NightPhase() {
 
   /**
    * Handles completing an action and moving to next role or ending night
+   * Includes a transition delay to allow players to put the phone down
    */
   const handleCompleteAction = () => {
     if (currentRoleIndex < activeRoles.length - 1) {
+      // Move to next role with transition delay
       setCurrentRoleIndex(currentRoleIndex + 1);
       setSelectedTarget('');
       setShowAction(false);
-      setNightStep('role-turn');
+      // Start transition countdown (in seconds)
+      setTransitionCountdown(Math.ceil(NIGHT_TURN_DELAY / 1000));
+      setNightStep('transition');
     } else {
       GameLogger.logGameEvent('NightPhaseComplete', {
         actionsCompleted: currentRoleIndex + 1,
@@ -307,6 +324,68 @@ export default function NightPhase() {
         >
           Begin Night Actions
         </button>
+      </div>
+    );
+  }
+
+  // Transition screen - countdown between role turns
+  if (nightStep === 'transition') {
+    const nextRole = activeRoles[currentRoleIndex];
+    const nextRoleName = nextRole === 'MAFIA_TEAM' ? 'Mafia Team' : nextRole;
+    
+    return (
+      <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-6">
+        <h2 className="text-2xl font-bold text-white text-center">🌙 Night {gameState.dayCount}</h2>
+        
+        <div className="text-center space-y-6">
+          <div className="bg-yellow-800/40 border border-yellow-600 rounded-lg p-6">
+            <h3 className="text-xl font-semibold text-yellow-200 mb-4">
+              👁️‍🗨️ Everyone Close Your Eyes
+            </h3>
+            <p className="text-yellow-300 text-lg mb-4">
+              Place the phone down and close your eyes.
+            </p>
+            <p className="text-yellow-400 text-sm">
+              The next role will be called in...
+            </p>
+          </div>
+          
+          {/* Countdown display */}
+          <div className="flex flex-col items-center">
+            <div className="text-6xl font-bold text-yellow-300 mb-2">
+              {transitionCountdown}
+            </div>
+            <p className="text-white/60 text-sm">seconds</p>
+          </div>
+          
+          <div className="bg-purple-600/20 border border-purple-500 rounded-lg p-4">
+            <p className="text-purple-200 text-sm">
+              <strong>Next:</strong> {nextRoleName}
+            </p>
+          </div>
+          
+          {/* Skip button for impatient users */}
+          <button
+            onClick={() => setNightStep('role-turn')}
+            className="px-6 py-2 bg-gray-600/50 hover:bg-gray-600 text-white/70 rounded-lg transition-colors text-sm"
+          >
+            Skip Wait
+          </button>
+        </div>
+        
+        {/* Progress indicator */}
+        <div className="mt-4">
+          <div className="flex justify-between text-white/60 text-xs mb-2">
+            <span>Night Progress</span>
+            <span>{currentRoleIndex + 1} / {activeRoles.length}</span>
+          </div>
+          <div className="w-full bg-white/20 rounded-full h-2">
+            <div 
+              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${((currentRoleIndex) / activeRoles.length) * 100}%` }}
+            ></div>
+          </div>
+        </div>
       </div>
     );
   }

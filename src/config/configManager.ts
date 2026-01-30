@@ -23,7 +23,8 @@ const configData = {
       "resultsDisplayTime": 10,
       "roleRevealTime": 15,
       "kamikazeRevengeTime": 30,
-      "transitionDelay": 2000
+      "transitionDelay": 2000,
+      "nightTurnTransitionDelay": 5000
     },
     "players": {
       "minPlayers": 4,
@@ -87,6 +88,7 @@ export interface TimingConfig {
   roleRevealTime: number;       // Time in seconds to show role assignments
   kamikazeRevengeTime: number;  // Time in seconds for kamikaze revenge selection
   transitionDelay: number;      // Delay in milliseconds between UI transitions
+  nightTurnTransitionDelay: number; // Delay in milliseconds between night role turns
 }
 
 export interface LoggingConfig {
@@ -230,7 +232,8 @@ function loadConfig(): GameConfig {
         resultsDisplayTime: 10,
         roleRevealTime: 15,
         kamikazeRevengeTime: 30,
-        transitionDelay: 2000
+        transitionDelay: 2000,
+        nightTurnTransitionDelay: 5000
       },
       logging: {
         enableApplicationInsights: false,
