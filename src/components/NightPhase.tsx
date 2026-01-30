@@ -2,32 +2,37 @@
  * Night Phase Component - Sequential special role actions
  * 
  * Handles the night phase where special roles perform their actions in order:
- * - Mafia/Godfather: Choose victim to eliminate
+ * - Mafia Team (all together): Choose victim to eliminate collaboratively
  * - Hooker: Roleblock a player (preventing their action)
  * - Detective: Investigate a player's role
  * - Doctor: Protect a player from elimination
  * - Silencer: Silence a player for next day phase
  * 
  * Key features:
- * - Sequential role processing (one role at a time)
+ * - Mafia team wakes up together and agrees on target
+ * - Sequential role processing for other roles (one role at a time)
+ * - Uses role names (not player names) when calling turns
  * - Role-specific targeting restrictions
  * - Skip option for roles that don't want to act
  * - Action submission and phase progression
  * 
  * Role restrictions:
- * - Mafia cannot target other Mafia members
- * - Hooker cannot target Godfather or other Hookers
+ * - Mafia/Godfather can target all non-mafia players (including Hooker)
+ * - Hooker cannot target Godfather (immune) or other Hookers
  * - Other roles can target anyone alive
  */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGame } from '@/context/GameContext';
 import { Role, PlayerStatus } from '@/types/game';
 import { GameLogger } from '@/lib/logger';
+import { MAFIA_TEAM_ROLES } from '@/constants/roles';
+import { useSpeech } from '@/hooks/useSpeech';
 
 export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
+  const speech = useSpeech();
   
   // Component state for managing night action flow
   const [selectedTarget, setSelectedTarget] = useState<string>('');     // Currently selected target
@@ -36,13 +41,21 @@ export default function NightPhase() {
   // State for device passing flow
   const [nightStep, setNightStep] = useState<'eyes-closed' | 'role-turn' | 'action-selection'>('eyes-closed');
   const [showAction, setShowAction] = useState(false);
+  
+  // Track if we've announced the current role (to avoid repeated announcements)
+  const hasAnnouncedRole = useRef(false);
+  const hasAnnouncedNightOpening = useRef(false);
 
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
   
-  // Define night role action order (Mafia acts first, then others)
-  const roleOrder = [
-    Role.MAFIA, 
-    Role.GODFATHER, 
+  // Get all alive mafia team members (for collaborative kill)
+  const aliveMafiaTeam = alivePlayers.filter(p => MAFIA_TEAM_ROLES.includes(p.role));
+  
+  // Define night role action order
+  // Mafia team acts first (together), then individual roles
+  // We use 'MAFIA_TEAM' as a special marker for combined mafia action
+  const roleOrder: (Role | 'MAFIA_TEAM')[] = [
+    'MAFIA_TEAM',  // All mafia wake up together
     Role.HOOKER, 
     Role.DETECTIVE, 
     Role.DOCTOR, 
@@ -50,23 +63,62 @@ export default function NightPhase() {
   ];
   
   // Filter to only roles that have living players
-  const activeRoles = roleOrder.filter(role => 
-    alivePlayers.some(p => p.role === role)
-  );
+  const activeRoles = roleOrder.filter(role => {
+    if (role === 'MAFIA_TEAM') {
+      // Include if any mafia team member is alive (excluding Hooker who acts separately)
+      return alivePlayers.some(p => p.role === Role.MAFIA || p.role === Role.GODFATHER);
+    }
+    return alivePlayers.some(p => p.role === role);
+  });
 
   const currentRole = activeRoles[currentRoleIndex];
-  const currentRolePlayers = alivePlayers.filter(p => p.role === currentRole);
+  
+  // Get players for current role
+  const currentRolePlayers = currentRole === 'MAFIA_TEAM'
+    ? alivePlayers.filter(p => p.role === Role.MAFIA || p.role === Role.GODFATHER)
+    : alivePlayers.filter(p => p.role === currentRole);
+    
+  // Speech announcement effect - announce when role turn changes
+  useEffect(() => {
+    if (nightStep === 'role-turn' && !hasAnnouncedRole.current && currentRole) {
+      hasAnnouncedRole.current = true;
+      const roleName = currentRole === 'MAFIA_TEAM' ? 'MAFIA_TEAM' : String(currentRole);
+      speech.announceRoleTurn(roleName);
+    }
+  }, [nightStep, currentRole, speech]);
+  
+  // Reset announcement flag when role index changes
+  useEffect(() => {
+    hasAnnouncedRole.current = false;
+  }, [currentRoleIndex]);
+  
+  // Announce night opening when entering eyes-closed phase
+  useEffect(() => {
+    if (nightStep === 'eyes-closed' && !hasAnnouncedNightOpening.current) {
+      hasAnnouncedNightOpening.current = true;
+      speech.announceNightOpening(gameState.dayCount);
+    }
+  }, [nightStep, gameState.dayCount, speech]);
+  
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      speech.stop();
+    };
+  }, [speech]);
   
   /**
    * Get valid targets based on role-specific restrictions
+   * Mafia/Godfather can target all non-mafia players (including Hooker)
    */
-  const getActionTargets = (role: Role) => {
+  const getActionTargets = (role: Role | 'MAFIA_TEAM') => {
     switch (role) {
+      case 'MAFIA_TEAM':
       case Role.MAFIA:
       case Role.GODFATHER:
-        // Mafia cannot kill other mafia team members (includes Hooker)
+        // Mafia can target all non-mafia players (including Hooker)
         return alivePlayers.filter(p => 
-          p.role !== Role.MAFIA && p.role !== Role.GODFATHER && p.role !== Role.HOOKER
+          p.role !== Role.MAFIA && p.role !== Role.GODFATHER
         );
       case Role.HOOKER:
         // Hooker can roleblock anyone except Godfather (immune) and other Hookers
@@ -124,22 +176,25 @@ export default function NightPhase() {
   const handleSubmitAction = () => {
     try {
       const actionType = getActionTypeForRole(currentRole);
-      if (selectedTarget && actionType && currentRolePlayers[0]) {
-        GameLogger.logUserAction('nightAction', currentRolePlayers[0].id, {
-          role: currentRole,
+      // For mafia team, use the first alive mafia member as the actor
+      const actingPlayer = currentRolePlayers[0];
+      
+      if (selectedTarget && actionType && actingPlayer) {
+        GameLogger.logUserAction('nightAction', actingPlayer.id, {
+          role: currentRole === 'MAFIA_TEAM' ? 'Mafia Team' : currentRole,
           action: actionType,
           targetId: selectedTarget,
           dayCount: gameState.dayCount,
           roleIndex: currentRoleIndex
         });
 
-        submitNightAction(currentRolePlayers[0].id, selectedTarget, actionType);
+        submitNightAction(actingPlayer.id, selectedTarget, actionType);
         handleCompleteAction();
       }
     } catch (error) {
       GameLogger.logException(error as Error, {
         action: 'handleSubmitAction',
-        currentRole,
+        currentRole: currentRole === 'MAFIA_TEAM' ? 'Mafia Team' : currentRole,
         selectedTarget
       });
     }
@@ -148,8 +203,9 @@ export default function NightPhase() {
   /**
    * Helper to get action type for a role
    */
-  const getActionTypeForRole = (role: Role): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
+  const getActionTypeForRole = (role: Role | 'MAFIA_TEAM'): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
     switch (role) {
+      case 'MAFIA_TEAM':
       case Role.MAFIA:
       case Role.GODFATHER:
         return 'kill';
@@ -172,7 +228,7 @@ export default function NightPhase() {
   const handleSkipAction = () => {
     try {
       GameLogger.logUserAction('nightActionSkipped', currentRolePlayers[0]?.id || 'unknown', {
-        role: currentRole,
+        role: currentRole === 'MAFIA_TEAM' ? 'Mafia Team' : currentRole,
         dayCount: gameState.dayCount,
         roleIndex: currentRoleIndex
       });
@@ -181,7 +237,7 @@ export default function NightPhase() {
     } catch (error) {
       GameLogger.logException(error as Error, {
         action: 'handleSkipAction',
-        currentRole,
+        currentRole: currentRole === 'MAFIA_TEAM' ? 'Mafia Team' : currentRole,
         currentRoleIndex
       });
     }
@@ -191,7 +247,21 @@ export default function NightPhase() {
   if (nightStep === 'eyes-closed') {
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-6">
-        <h2 className="text-2xl font-bold text-white text-center">🌙 Night {gameState.dayCount}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">🌙 Night {gameState.dayCount}</h2>
+          {/* Speech toggle button */}
+          <button
+            onClick={speech.toggleSpeech}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              speech.isEnabled 
+                ? 'bg-green-600/30 border border-green-500 text-green-200' 
+                : 'bg-gray-600/30 border border-gray-500 text-gray-300'
+            }`}
+            title={speech.isEnabled ? 'Disable voice announcements' : 'Enable voice announcements'}
+          >
+            {speech.isEnabled ? '🔊' : '🔇'} Voice {speech.isEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
         
         <div className="text-center space-y-4">
           <div className="bg-blue-800/40 border border-blue-600 rounded-lg p-6">
@@ -204,6 +274,24 @@ export default function NightPhase() {
             <p className="text-blue-400 text-sm mt-3">
               The night phase is about to begin. Special roles will be called one by one.
             </p>
+            {speech.isEnabled && (
+              <div className="mt-4 space-y-2">
+                <p className="text-green-300 text-xs">
+                  🔊 Voice announcements enabled - roles will be called out loud
+                </p>
+                {/* Test speech button */}
+                <button
+                  onClick={speech.testSpeech}
+                  disabled={speech.isSpeaking}
+                  className="px-4 py-2 bg-green-600/30 border border-green-500 text-green-200 rounded-lg text-sm hover:bg-green-600/50 transition-colors disabled:opacity-50"
+                >
+                  {speech.isSpeaking ? '🔊 Speaking...' : '🎤 Test Voice'}
+                </button>
+                {!speech.isReady && (
+                  <p className="text-yellow-300 text-xs">⏳ Loading voices...</p>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="bg-purple-600/20 border border-purple-500 rounded-lg p-4">
@@ -225,37 +313,88 @@ export default function NightPhase() {
 
   // Device passing screen - shown when it's a role's turn
   if (nightStep === 'role-turn' && !showAction) {
-    const currentRolePlayer = currentRolePlayers[0];
+    const isMafiaTeam = currentRole === 'MAFIA_TEAM';
+    const displayRoleName = isMafiaTeam ? 'Mafia Team' : currentRole;
+    
+    // Get role names for display (e.g., "Godfather and Mafia")
+    const getMafiaTeamDisplay = () => {
+      const roles = currentRolePlayers.map(p => p.role);
+      const uniqueRoles = Array.from(new Set(roles));
+      return uniqueRoles.join(' and ');
+    };
+    
+    // Replay the voice announcement for current role
+    const handleReplayAnnouncement = () => {
+      const roleName = currentRole === 'MAFIA_TEAM' ? 'MAFIA_TEAM' : String(currentRole);
+      speech.announceRoleTurn(roleName);
+    };
     
     return (
       <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">🌙 Night Actions</h2>
-          <span className="text-white/60 text-sm">
-            {currentRoleIndex + 1} of {activeRoles.length}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Replay announcement button */}
+            {speech.isEnabled && (
+              <button
+                onClick={handleReplayAnnouncement}
+                disabled={speech.isSpeaking}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-purple-600/30 border border-purple-500 text-purple-200 text-xs hover:bg-purple-600/50 transition-colors disabled:opacity-50"
+                title="Replay voice announcement"
+              >
+                {speech.isSpeaking ? '🔊' : '🔁'} {speech.isSpeaking ? 'Speaking...' : 'Replay'}
+              </button>
+            )}
+            <span className="text-white/60 text-sm">
+              {currentRoleIndex + 1} of {activeRoles.length}
+            </span>
+          </div>
         </div>
         
         <div className="text-center space-y-4">
           <div className="bg-gray-800/60 border border-gray-600 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-200 mb-4">
-              {currentRole} Player&apos;s Turn
-            </h3>
-            <div className="text-2xl font-bold text-purple-300 mb-4">
-              {currentRolePlayer?.name}
-            </div>
-            <p className="text-gray-300 text-sm">
-              {currentRolePlayer?.name}, open your eyes and take the device privately.
-              <br />Everyone else must keep their eyes closed.
-            </p>
+            {isMafiaTeam ? (
+              <>
+                <h3 className="text-lg font-semibold text-red-300 mb-4">
+                  🔪 Mafia Team&apos;s Turn
+                </h3>
+                <div className="text-xl font-bold text-red-200 mb-4">
+                  {getMafiaTeamDisplay()}
+                </div>
+                <p className="text-gray-300 text-sm">
+                  Mafia team, open your eyes and look at each other.
+                  <br />Agree on which player to eliminate tonight.
+                  <br />One of you will then select the target on the device.
+                </p>
+                <div className="mt-4 bg-red-900/30 rounded-lg p-3">
+                  <p className="text-red-200 text-xs">
+                    <strong>Mafia members:</strong> {currentRolePlayers.map(p => `${p.role}`).join(', ')}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-200 mb-4">
+                  {displayRoleName}&apos;s Turn
+                </h3>
+                <p className="text-gray-300 text-sm">
+                  {displayRoleName}, open your eyes and take the device privately.
+                  <br />Everyone else must keep their eyes closed.
+                </p>
+              </>
+            )}
           </div>
           
           <div className="space-y-3">
             <button
               onClick={handleShowActionInterface}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-6 rounded-lg transition-colors text-lg"
+              className={`w-full font-bold py-4 px-6 rounded-lg transition-colors text-lg ${
+                isMafiaTeam 
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
             >
-              I&apos;m {currentRolePlayer?.name} - Show My Action
+              {isMafiaTeam ? "We're the Mafia - Show Our Action" : `I'm the ${displayRoleName} - Show My Action`}
             </button>
             
             <button
@@ -287,8 +426,9 @@ export default function NightPhase() {
   /**
    * Maps role to its corresponding action type
    */
-  const getActionType = (role: Role): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
+  const getActionType = (role: Role | 'MAFIA_TEAM'): 'kill' | 'protect' | 'investigate' | 'silence' | 'roleblock' | null => {
     switch (role) {
+      case 'MAFIA_TEAM':
       case Role.MAFIA:
       case Role.GODFATHER:
         return 'kill';
@@ -308,8 +448,10 @@ export default function NightPhase() {
   /**
    * Gets user-friendly action description for each role
    */
-  const getActionDescription = (role: Role): string => {
+  const getActionDescription = (role: Role | 'MAFIA_TEAM'): string => {
     switch (role) {
+      case 'MAFIA_TEAM':
+        return 'Choose someone to eliminate together as a team';
       case Role.MAFIA:
         return 'Choose someone to eliminate';
       case Role.GODFATHER:
@@ -330,8 +472,9 @@ export default function NightPhase() {
   /**
    * Gets role-specific color styling
    */
-  const getRoleColor = (role: Role): string => {
+  const getRoleColor = (role: Role | 'MAFIA_TEAM'): string => {
     switch (role) {
+      case 'MAFIA_TEAM':
       case Role.MAFIA:
       case Role.GODFATHER:
       case Role.HOOKER:
@@ -364,13 +507,14 @@ export default function NightPhase() {
   }
 
   const actionType = getActionType(currentRole);
-  const currentRolePlayer = currentRolePlayers[0];
+  const isMafiaTeam = currentRole === 'MAFIA_TEAM';
+  const displayRoleName = isMafiaTeam ? 'Mafia Team' : currentRole;
 
   // Action selection screen - main night action interface
   return (
     <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 space-y-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white">🌙 {currentRole}&apos;s Action</h2>
+        <h2 className="text-2xl font-bold text-white">🌙 {displayRoleName}&apos;s Action</h2>
         <span className="text-white/60 text-sm">
           {currentRoleIndex + 1} of {activeRoles.length}
         </span>
@@ -378,7 +522,9 @@ export default function NightPhase() {
 
       {/* Role info panel */}
       <div className={`p-4 rounded-lg border ${getRoleColor(currentRole)}`}>
-        <h3 className="text-white font-semibold mb-2">{currentRolePlayer?.name}</h3>
+        <h3 className="text-white font-semibold mb-2">
+          {isMafiaTeam ? `Mafia Team (${currentRolePlayers.map(p => p.role).join(', ')})` : displayRoleName}
+        </h3>
         <p className="text-white/80 text-sm">{getActionDescription(currentRole)}</p>
       </div>
 

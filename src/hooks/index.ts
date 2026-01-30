@@ -6,3 +6,4 @@
  */
 
 export * from './useGame';
+export * from './useSpeech';

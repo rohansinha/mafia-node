@@ -60,18 +60,26 @@ export function createPlayer(
  * Automatically determines the optimal role mix based on player count.
  * 
  * Distribution logic:
- * - 4-6 players: 1 Mafia, 1 Detective, rest Citizens
- * - 7-9 players: 1 Mafia, 1 Detective, 1 Doctor, rest Citizens  
- * - 10+ players: Additional Mafia and special roles for balance
+ * - Minimum 6 players: 2 Mafia, 4 Citizens
+ * - Enforced: 1 mafia per 4 players (minimum 2 for 6 players)
+ * - Recommended: 1 mafia per 3 players for better gameplay
+ * - 8+ players: Godfather replaces one Mafia
+ * - 10+ players: Additional special roles for balance
  */
 export function assignRolesRecommended(playerNames: string[]): Player[] {
   const numPlayers = playerNames.length;
   const roles: Role[] = [];
   
-  // Calculate optimal number of Mafia roles (1 per 4 players, minimum 1)
-  const numMafia = Math.max(1, Math.floor(numPlayers / 4));
+  // Calculate number of Mafia roles
+  // Enforced: 1 per 4 players, minimum 2 for base game (6 players)
+  // For 6 players: 2 mafia, for 7-8: 2 mafia, 9-11: 3 mafia, 12+: 4 mafia, etc.
+  const enforcedMafia = Math.max(2, Math.floor(numPlayers / 4));
+  // Recommended: 1 per 3 players for better balance
+  const recommendedMafia = Math.floor(numPlayers / 3);
+  // Use recommended count but ensure at least enforced minimum
+  const numMafia = Math.max(enforcedMafia, Math.min(recommendedMafia, Math.floor(numPlayers / 3)));
   
-  // Add Mafia roles with enhanced roles for larger games
+  // Add Mafia roles with Godfather for larger games
   for (let i = 0; i < numMafia; i++) {
     if (i === 0 && numPlayers >= 8) {
       roles.push(Role.GODFATHER);
@@ -80,19 +88,19 @@ export function assignRolesRecommended(playerNames: string[]): Player[] {
     }
   }
   
-  // Add Hooker for very large games
+  // Add Hooker for very large games (replaces one Mafia slot's power with roleblock)
   if (numPlayers >= 12) {
     roles.push(Role.HOOKER);
   }
   
   // Add town special roles progressively based on player count
-  if (numPlayers >= 5) roles.push(Role.DETECTIVE);
-  if (numPlayers >= 7) roles.push(Role.DOCTOR);
-  if (numPlayers >= 9) roles.push(Role.SILENCER);
-  if (numPlayers >= 11) roles.push(Role.KAMIKAZE);
+  if (numPlayers >= 7) roles.push(Role.DETECTIVE);
+  if (numPlayers >= 8) roles.push(Role.DOCTOR);
+  if (numPlayers >= 10) roles.push(Role.SILENCER);
+  if (numPlayers >= 12) roles.push(Role.KAMIKAZE);
   
-  // Add Joker for medium+ games
-  if (numPlayers >= 10) roles.push(Role.JOKER);
+  // Add Joker for large games
+  if (numPlayers >= 11) roles.push(Role.JOKER);
   
   // Fill remaining slots with Citizens
   while (roles.length < numPlayers) {
@@ -251,6 +259,9 @@ export function calculateVoteResult(
 
 /**
  * Get valid night action targets based on role restrictions
+ * 
+ * Mafia/Godfather can target all non-mafia players (including Hooker)
+ * Hooker cannot target Godfather (immune) or other Hookers
  */
 export function getValidNightTargets(
   actingPlayer: Player,
@@ -269,11 +280,13 @@ export function getValidNightTargets(
       return false;
     }
     
-    // Mafia/Godfather can't target their own team
-    if (!roleConfig.canTargetTeammates) {
-      if (MAFIA_TEAM_ROLES.includes(actingPlayer.role) && MAFIA_TEAM_ROLES.includes(target.role)) {
+    // Mafia/Godfather can target everyone except other Mafia/Godfather
+    // This means they CAN target Hooker (who is on their team but not protected)
+    if (actingPlayer.role === Role.MAFIA || actingPlayer.role === Role.GODFATHER) {
+      if (target.role === Role.MAFIA || target.role === Role.GODFATHER) {
         return false;
       }
+      return true;
     }
     
     // Hooker can't target Godfather (immune) or other Hookers
@@ -312,19 +325,35 @@ export function processNightKill(
 
 /**
  * Calculate role distribution preview for custom mode
+ * 
+ * Mafia rules:
+ * - Enforced minimum: 1 mafia per 4 players (min 2 for 6 players)
+ * - If Godfather selected in custom roles, counts toward mafia requirement
  */
 export function calculateRoleDistribution(
   selectedRoles: Role[],
   totalPlayers: number
-): { numMafia: number; numCitizens: number; isValid: boolean } {
+): { numMafia: number; numCitizens: number; isValid: boolean; enforcedMafia: number } {
   const remainingPlayers = totalPlayers - selectedRoles.length;
-  const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
-  const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+  
+  // Count mafia-team roles already selected (Godfather, Hooker)
+  const selectedMafiaCount = selectedRoles.filter(r => 
+    r === Role.GODFATHER || r === Role.MAFIA || r === Role.HOOKER
+  ).length;
+  
+  // Enforced: 1 per 4 players, minimum 2 for base game
+  const enforcedMafia = Math.max(2, Math.floor(totalPlayers / 4));
+  
+  // Calculate how many more mafia needed (at least 1 regular mafia if none selected)
+  const additionalMafiaNeeded = Math.max(0, enforcedMafia - selectedMafiaCount);
+  const numMafia = Math.max(additionalMafiaNeeded, 1); // At least 1 mafia if no mafia-team selected
+  
   const numCitizens = remainingPlayers - numMafia;
   
   return {
     numMafia,
     numCitizens,
     isValid: numCitizens >= 0,
+    enforcedMafia,
   };
 }

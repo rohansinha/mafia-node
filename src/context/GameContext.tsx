@@ -126,8 +126,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         gameMode: action.payload,
-        // Both modes currently go to SETUP - online will be different when implemented
-        currentPhase: action.payload === GameMode.OFFLINE ? GamePhase.SETUP : GamePhase.SETUP,
+        currentPhase: GamePhase.SETUP,
       };
       
     case 'INITIALIZE_GAME':

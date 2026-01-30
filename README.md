@@ -60,8 +60,9 @@ A feature-rich digital implementation of the classic Mafia party game with exten
    - Democratic voting to eliminate suspects
    - Special elimination handling (Joker wins, Kamikaze revenge)
 4. **Night Phase**: 
-   - Mafia chooses elimination target
-   - Special roles perform their abilities
+   - Mafia team wakes up together and agrees on target
+   - One Mafia member selects the elimination target
+   - Special roles perform their abilities (called by role name, not player name)
    - Doctor protection and roleblocking resolution
 5. **Win Detection**: Game ends when victory conditions are met
 
@@ -75,9 +76,15 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 ### Assignment Modes
 
 #### Recommended Mode (Balanced)
-- **4-6 players**: 1 Mafia, 1 Detective, rest Citizens
-- **7-9 players**: 1 Mafia, 1 Detective, 1 Doctor, rest Citizens
-- **10+ players**: Additional Mafia and special roles for balance
+- **6 players**: 2 Mafia, 4 Citizens (minimum game size)
+- **7 players**: 2 Mafia, 1 Detective, 4 Citizens
+- **8 players**: 1 Godfather + 1 Mafia, 1 Detective, 1 Doctor, 4 Citizens
+- **10+ players**: Additional special roles for balance (Silencer, Joker)
+- **12+ players**: + Hooker, + Kamikaze
+
+**Mafia Rules:**
+- Enforced: 1 mafia per 4 players (minimum 2)
+- Recommended: 1 mafia per 3 players for better gameplay
 
 #### Custom Mode (User-Defined)
 - Choose specific roles and quantities
@@ -199,6 +206,12 @@ src/
 - ✅ Enhanced voting interface with player status
 - ✅ Comprehensive game statistics and progress tracking
 - ✅ Intuitive navigation and user feedback
+
+## 📋 TODO
+
+- [x] Update "Role Distribution Preview" to show Godfather as part of Mafia team
+- [x] Change default to 6 player minimum game, with 2 Mafia and 4 Civilians
+- [ ] Special role selection should allow 0 citizens/civilians 
 
 ## 🔮 Future Development
 

@@ -10,7 +10,7 @@
       "transitionDelay": 2000
     },
     "players": {
-      "minPlayers": 4,
+      "minPlayers": 6,
       "maxPlayers": 20
     },
     "features": {

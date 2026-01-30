@@ -252,10 +252,11 @@ export default function SetupPhase() {
               Automatically assigns roles based on player count. Perfect for new players and balanced gameplay.
             </p>
             <div className="text-white/60 text-xs mt-2 space-y-1">
-              <p>• 4-6 players: 1 Mafia, 1 Detective, rest Citizens</p>
-              <p>• 7+ players: + Doctor</p>
-              <p>• 8+ players: Godfather replaces Mafia</p>
-              <p>• 10+ players: + Joker</p>
+              <p>• 6 players: 2 Mafia, 4 Citizens</p>
+              <p>• 7+ players: + Detective</p>
+              <p>• 8+ players: Godfather + Mafia, + Doctor</p>
+              <p>• 10+ players: + Silencer</p>
+              <p>• 11+ players: + Joker</p>
             </div>
           </button>
 
@@ -268,7 +269,8 @@ export default function SetupPhase() {
               Select specific roles you want to include. Great for experienced players who want to try different combinations.
             </p>
             <p className="text-white/60 text-xs mt-2">
-              Choose from Detective, Doctor, Silencer, Kamikaze, Joker, Godfather, and Hooker
+              Choose from Detective, Doctor, Silencer, Kamikaze, Joker, Godfather, and Hooker.
+              <br />Note: Godfather can replace one Mafia in custom mode.
             </p>
           </button>
         </div>
@@ -296,13 +298,13 @@ export default function SetupPhase() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-white/80 text-sm mb-2">Total Players</label>
+            <label className="block text-white/80 text-sm mb-2">Total Players (minimum 6)</label>
             <input
               type="number"
-              min="4"
+              min="6"
               max="20"
               value={totalPlayers}
-              onChange={(e) => setTotalPlayers(parseInt(e.target.value) || 6)}
+              onChange={(e) => setTotalPlayers(Math.max(6, parseInt(e.target.value) || 6))}
               className="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
@@ -345,15 +347,32 @@ export default function SetupPhase() {
               <p>Selected special roles: {selectedRoles.length}</p>
               {(() => {
                 const remainingPlayers = totalPlayers - selectedRoles.length;
-                const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
-                const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+                
+                // Count mafia-team roles already selected (Godfather, Hooker count toward mafia)
+                const selectedMafiaCount = selectedRoles.filter(r => 
+                  r === Role.GODFATHER || r === Role.HOOKER
+                ).length;
+                
+                // Enforced: 1 per 4 players, minimum 2 for base game
+                const enforcedMafia = Math.max(2, Math.floor(totalPlayers / 4));
+                
+                // Calculate additional mafia needed
+                const additionalMafiaNeeded = Math.max(0, enforcedMafia - selectedMafiaCount);
+                const numMafia = Math.max(additionalMafiaNeeded, selectedMafiaCount > 0 ? 0 : 2);
                 const numCitizens = remainingPlayers - numMafia;
                 
                 return (
                   <>
                     <p>Citizens: {Math.max(0, numCitizens)}</p>
-                    <p>Mafia: {numMafia}</p>
+                    <p>Mafia Team: {numMafia + selectedMafiaCount} 
+                      {selectedMafiaCount > 0 && (
+                        <span className="text-white/50"> (includes {selectedRoles.filter(r => r === Role.GODFATHER || r === Role.HOOKER).join(', ')})</span>
+                      )}
+                    </p>
                     <p>Total: {totalPlayers}</p>
+                    <p className="text-white/50 text-xs mt-1">
+                      Enforced minimum: {enforcedMafia} mafia (1 per 4 players, min 2)
+                    </p>
                     {numCitizens < 0 && (
                       <p className="text-red-400">⚠️ Too many roles selected! Remove {Math.abs(numCitizens)} role(s).</p>
                     )}
@@ -368,10 +387,14 @@ export default function SetupPhase() {
           onClick={handleCustomRolesNext}
           disabled={(() => {
             const remainingPlayers = totalPlayers - selectedRoles.length;
-            const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
-            const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+            const selectedMafiaCount = selectedRoles.filter(r => 
+              r === Role.GODFATHER || r === Role.HOOKER
+            ).length;
+            const enforcedMafia = Math.max(2, Math.floor(totalPlayers / 4));
+            const additionalMafiaNeeded = Math.max(0, enforcedMafia - selectedMafiaCount);
+            const numMafia = Math.max(additionalMafiaNeeded, selectedMafiaCount > 0 ? 0 : 2);
             const numCitizens = remainingPlayers - numMafia;
-            return numCitizens < 0;
+            return numCitizens < 0 || totalPlayers < 6;
           })()}
           className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors"
         >
@@ -546,13 +569,13 @@ export default function SetupPhase() {
 
       <div className="text-center">
         <div className="text-white/70 text-sm mb-4">
-          <p>Minimum 4 players required</p>
+          <p>Minimum 6 players required</p>
           <p>Current players: {playerNames.filter(name => name.trim()).length}</p>
         </div>
         
         <button
           onClick={handleInitialize}
-          disabled={playerNames.filter(name => name.trim()).length < 4}
+          disabled={playerNames.filter(name => name.trim()).length < 6}
           className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg transition-colors"
         >
           Assign Roles
@@ -561,11 +584,12 @@ export default function SetupPhase() {
 
       {assignmentMode === AssignmentMode.RECOMMENDED && (
         <div className="text-white/60 text-xs space-y-1">
-          <p>• 4-6 players: 1 Mafia, 1 Detective, rest Citizens</p>
-          <p>• 7+ players: 1 Mafia, 1 Detective, 1 Doctor, rest Citizens</p>
-          <p>• 8+ players: Godfather replaces Mafia</p>
-          <p>• 10+ players: + Joker, 11+ players: + Kamikaze</p>
-          <p>• 12+ players: + Hooker</p>
+          <p>• 6 players: 2 Mafia, 4 Citizens</p>
+          <p>• 7+ players: 2 Mafia, 1 Detective, rest Citizens</p>
+          <p>• 8+ players: 1 Godfather + 1 Mafia, 1 Detective, 1 Doctor, rest Citizens</p>
+          <p>• 10+ players: + Silencer</p>
+          <p>• 11+ players: + Joker</p>
+          <p>• 12+ players: + Hooker, + Kamikaze</p>
         </div>
       )}
     </div>
