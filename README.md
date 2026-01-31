@@ -207,6 +207,79 @@ src/
 - ✅ Comprehensive game statistics and progress tracking
 - ✅ Intuitive navigation and user feedback
 
+### Text-to-Speech Support
+- ✅ Voice announcements during night phase
+- ✅ Multiple TTS providers supported (Browser, Azure, ElevenLabs)
+- ✅ Configurable voice settings per provider
+- ✅ Automatic fallback to browser TTS if cloud provider fails
+
+## 🔊 Text-to-Speech Configuration
+
+The game supports voice announcements during night phases. You can configure the TTS provider in `src/config/gameConfig.json`:
+
+### Available Providers
+
+| Provider | Quality | Free Tier | Setup Required |
+|----------|---------|-----------|----------------|
+| `browser` | Basic | Unlimited | None |
+| `azure` | Natural (Neural) | 500K chars/month | API Key + Region |
+| `elevenlabs` | Most Natural | 10K chars/month | API Key |
+
+### Configuration Example
+
+In `gameConfig.json`, set the `tts.provider` to your preferred option:
+
+```json
+{
+  "tts": {
+    "provider": "browser",  // "browser", "azure", or "elevenlabs"
+    "azure": {
+      "voice": "en-US-GuyNeural",
+      "style": "serious",
+      "rate": "0%",
+      "pitch": "0%"
+    },
+    "elevenlabs": {
+      "voiceId": "TxGEqnHWrfWFTfGW9XjX",
+      "modelId": "eleven_monolingual_v1",
+      "stability": 0.5,
+      "similarityBoost": 0.75
+    }
+  }
+}
+```
+
+### Environment Variables
+
+For cloud TTS providers, set these environment variables:
+
+**Azure Cognitive Services:**
+```env
+NEXT_PUBLIC_AZURE_SPEECH_KEY=your-azure-speech-key
+NEXT_PUBLIC_AZURE_SPEECH_REGION=your-region  # e.g., eastus
+```
+
+**ElevenLabs:**
+```env
+NEXT_PUBLIC_ELEVENLABS_API_KEY=your-elevenlabs-api-key
+```
+
+### Voice Options
+
+**Azure Neural Voices:**
+- `en-US-GuyNeural` - Deep male voice (recommended)
+- `en-US-DavisNeural` - Narrative male voice
+- `en-US-TonyNeural` - Casual male voice
+- `en-US-JennyNeural` - Female voice
+
+**Azure Styles:** `serious`, `cheerful`, `terrified`, `shouting`, `whispering`
+
+**ElevenLabs Voice IDs:**
+- `TxGEqnHWrfWFTfGW9XjX` - Josh (deep, narrative)
+- `EXAVITQu4vr4xnSDxMaL` - Bella (female)
+- `21m00Tcm4TlvDq8ikWAM` - Rachel (female)
+- `pNInz6obpgDQGcFmaJgB` - Adam (deep male)
+
 ## 📋 TODO
 
 - [x] Update "Role Distribution Preview" to show Godfather as part of Mafia team

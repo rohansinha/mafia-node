@@ -24,7 +24,8 @@ const configData = {
       "roleRevealTime": 15,
       "kamikazeRevengeTime": 30,
       "transitionDelay": 2000,
-      "nightTurnTransitionDelay": 5000
+      "nightTurnTransitionDelay": 5000,
+      "audioPromptReplayDelay": 10
     },
     "players": {
       "minPlayers": 4,
@@ -55,6 +56,21 @@ const configData = {
     "enableHapticFeedback": true,
     "fontSizeMultiplier": 1.0,
     "highContrastMode": false
+  },
+  "tts": {
+    "provider": "azure",
+    "azure": {
+      "voice": "en-US-GuyNeural",
+      "style": "serious",
+      "rate": "0%",
+      "pitch": "0%"
+    },
+    "elevenlabs": {
+      "voiceId": "TxGEqnHWrfWFTfGW9XjX",
+      "modelId": "eleven_monolingual_v1",
+      "stability": 0.5,
+      "similarityBoost": 0.75
+    }
   },
   "environment": {
     "development": {
@@ -89,6 +105,7 @@ export interface TimingConfig {
   kamikazeRevengeTime: number;  // Time in seconds for kamikaze revenge selection
   transitionDelay: number;      // Delay in milliseconds between UI transitions
   nightTurnTransitionDelay: number; // Delay in milliseconds between night role turns
+  audioPromptReplayDelay: number;   // Delay in seconds before auto-replaying audio prompt
 }
 
 export interface LoggingConfig {
@@ -124,12 +141,33 @@ export interface UIConfig {
   highContrastMode: boolean;       // High contrast mode for accessibility
 }
 
+export interface AzureTTSConfig {
+  voice: string;       // Azure Neural voice name (e.g., "en-US-GuyNeural")
+  style: string;       // Speaking style (e.g., "serious", "cheerful")
+  rate: string;        // Speech rate ("slow", "medium", "fast")
+  pitch: string;       // Pitch ("low", "medium", "high")
+}
+
+export interface ElevenLabsTTSConfig {
+  voiceId: string;         // ElevenLabs voice ID
+  modelId: string;         // Model ID (e.g., "eleven_monolingual_v1")
+  stability: number;       // Voice stability (0-1)
+  similarityBoost: number; // Similarity boost (0-1)
+}
+
+export interface TTSConfig {
+  provider: 'browser' | 'azure' | 'elevenlabs';  // TTS provider to use
+  azure?: AzureTTSConfig;                         // Azure-specific settings
+  elevenlabs?: ElevenLabsTTSConfig;               // ElevenLabs-specific settings
+}
+
 export interface GameConfig {
   timing: TimingConfig;
   logging: LoggingConfig;
   players: PlayersConfig;
   features: FeaturesConfig;
   ui: UIConfig;
+  tts?: TTSConfig;        // Text-to-speech configuration
   version: string;
 }
 
@@ -161,6 +199,7 @@ function loadConfig(): GameConfig {
       players: configData.game.players,
       features: configData.game.features,
       ui: configData.ui,
+      tts: configData.tts as TTSConfig,
       version: configData.version,
     };
 
@@ -233,7 +272,8 @@ function loadConfig(): GameConfig {
         roleRevealTime: 15,
         kamikazeRevengeTime: 30,
         transitionDelay: 2000,
-        nightTurnTransitionDelay: 5000
+        nightTurnTransitionDelay: 5000,
+        audioPromptReplayDelay: 10
       },
       logging: {
         enableApplicationInsights: false,
@@ -263,6 +303,21 @@ function loadConfig(): GameConfig {
         enableHapticFeedback: true,
         fontSizeMultiplier: 1.0,
         highContrastMode: false
+      },
+      tts: {
+        provider: 'azure',
+        azure: {
+          voice: 'en-US-GuyNeural',
+          style: 'serious',
+          rate: '0%',
+          pitch: '0%'
+        },
+        elevenlabs: {
+          voiceId: 'TxGEqnHWrfWFTfGW9XjX',
+          modelId: 'eleven_monolingual_v1',
+          stability: 0.5,
+          similarityBoost: 0.75
+        }
       },
       version: '1.0.0'
     };
