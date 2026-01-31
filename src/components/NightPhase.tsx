@@ -33,6 +33,8 @@ import { gameConfig } from '@/config/configManager';
 
 // Get the night turn transition delay from config (default 5 seconds)
 const NIGHT_TURN_DELAY = gameConfig.timing.nightTurnTransitionDelay || 5000;
+// Get the audio prompt replay delay from config (default 10 seconds)
+const AUDIO_PROMPT_REPLAY_DELAY = gameConfig.timing.audioPromptReplayDelay || 10;
 
 export default function NightPhase() {
   const { gameState, submitNightAction, nextPhase } = useGame();
@@ -46,6 +48,7 @@ export default function NightPhase() {
   const [nightStep, setNightStep] = useState<'eyes-closed' | 'transition' | 'role-turn' | 'action-selection'>('eyes-closed');
   const [showAction, setShowAction] = useState(false);
   const [transitionCountdown, setTransitionCountdown] = useState(0);    // Countdown in seconds
+  const [autoReplayCountdown, setAutoReplayCountdown] = useState(0);    // Countdown until audio auto-replay
   
   // Track if we've announced the current role (to avoid repeated announcements)
   const announcedRoleIndex = useRef(-1);
@@ -89,8 +92,25 @@ export default function NightPhase() {
       announcedRoleIndex.current = currentRoleIndex;
       const roleName = currentRole === 'MAFIA_TEAM' ? 'MAFIA_TEAM' : String(currentRole);
       speech.announceRoleTurn(roleName);
+      // Start the auto-replay countdown
+      setAutoReplayCountdown(AUDIO_PROMPT_REPLAY_DELAY);
     }
   }, [nightStep, currentRole, currentRoleIndex, speech]);
+  
+  // Auto-replay countdown effect - replay audio if player doesn't tap "Show Action"
+  useEffect(() => {
+    if (nightStep === 'role-turn' && autoReplayCountdown > 0) {
+      const timer = setTimeout(() => {
+        setAutoReplayCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (nightStep === 'role-turn' && autoReplayCountdown === 0 && currentRole) {
+      // Countdown reached zero, replay the audio and restart countdown
+      const roleName = currentRole === 'MAFIA_TEAM' ? 'MAFIA_TEAM' : String(currentRole);
+      speech.announceRoleTurn(roleName);
+      setAutoReplayCountdown(AUDIO_PROMPT_REPLAY_DELAY);
+    }
+  }, [nightStep, autoReplayCountdown, currentRole, speech]);
   
   // Transition countdown effect - wait before showing next role turn
   useEffect(() => {
@@ -163,6 +183,8 @@ export default function NightPhase() {
   const handleShowActionInterface = () => {
     setShowAction(true);
     setNightStep('action-selection');
+    setAutoReplayCountdown(0);  // Stop the auto-replay countdown
+    speech.stop();              // Stop any playing audio
   };
 
   /**

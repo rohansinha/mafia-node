@@ -8,7 +8,8 @@
       "roleRevealTime": 15,
       "kamikazeRevengeTime": 30,
       "transitionDelay": 2000,
-      "nightTurnTransitionDelay": 5000
+      "nightTurnTransitionDelay": 5000,
+      "audioPromptReplayDelay": 10
     },
     "players": {
       "minPlayers": 6,
@@ -39,6 +40,22 @@
     "enableHapticFeedback": true,
     "fontSizeMultiplier": 1.0,
     "highContrastMode": false
+  },
+  "tts": {
+    "options": ["azure", "elevenlabs", "browser"],
+    "provider": "azure",
+    "azure": {
+      "voice": "en-US-GuyNeural",
+      "style": "serious",
+      "rate": "0%",
+      "pitch": "0%"
+    },
+    "elevenlabs": {
+      "voiceId": "TxGEqnHWrfWFTfGW9XjX",
+      "modelId": "eleven_monolingual_v1",
+      "stability": 0.5,
+      "similarityBoost": 0.75
+    }
   },
   "environment": {
     "development": {
