@@ -2,7 +2,8 @@
  * Game Mode Selection Component
  * 
  * Initial screen that allows users to choose between:
- * - Local Offline mode: Device-passing gameplay for in-person groups
+ * - Local Offline mode: Device-passing gameplay for in-person groups (single device)
+ * - Local Multiplayer: Multiple devices on same network, one host orchestrates
  * - Online Multiplayer mode: Individual devices for remote play (coming soon)
  * 
  * Provides clear descriptions of each mode's features and availability status.
@@ -30,7 +31,7 @@ export default function GameModeSelection() {
       </div>
 
       <div className="space-y-4">
-        {/* Local Offline Mode - Fully functional device-passing gameplay */}
+        {/* Local Offline Mode - Device-passing gameplay */}
         <button
           onClick={() => handleModeSelect(GameMode.OFFLINE)}
           className="w-full p-6 bg-green-600/20 border-2 border-green-500 rounded-lg 
@@ -43,7 +44,25 @@ export default function GameModeSelection() {
               Pass one device around your group. Perfect for in-person gatherings!
             </p>
             <div className="text-green-400 text-xs mt-3 opacity-80">
-              ✓ Available now • ✓ No internet required • ✓ Private & secure
+              ✓ Single device • ✓ No internet required • ✓ Device passing
+            </div>
+          </div>
+        </button>
+
+        {/* Local Multiplayer Mode - Multiple devices on same network */}
+        <button
+          onClick={() => handleModeSelect(GameMode.LOCAL_MULTIPLAYER)}
+          className="w-full p-6 bg-purple-600/20 border-2 border-purple-500 rounded-lg 
+            hover:bg-purple-600/30 transition-colors group"
+        >
+          <div className="text-center space-y-2">
+            <div className="text-4xl">📡</div>
+            <h3 className="text-xl font-bold text-purple-200">Local Multiplayer</h3>
+            <p className="text-purple-300 text-sm">
+              Each player uses their own device on the same network. One device hosts the game.
+            </p>
+            <div className="text-purple-400 text-xs mt-3 opacity-80">
+              ✓ Multiple devices • ✓ Same WiFi network • ✓ No internet needed
             </div>
           </div>
         </button>
@@ -52,16 +71,17 @@ export default function GameModeSelection() {
         <button
           onClick={() => handleModeSelect(GameMode.ONLINE)}
           className="w-full p-6 bg-blue-600/20 border-2 border-blue-500 rounded-lg 
-            hover:bg-blue-600/30 transition-colors group relative"
+            hover:bg-blue-600/30 transition-colors group relative opacity-60"
+          disabled
         >
           <div className="text-center space-y-2">
             <div className="text-4xl">🌐</div>
             <h3 className="text-xl font-bold text-blue-200">Online Multiplayer</h3>
             <p className="text-blue-300 text-sm">
-              Each player uses their own device. Play remotely with friends!
+              Play remotely over the internet. Join rooms with a code!
             </p>
             <div className="text-blue-400 text-xs mt-3 opacity-80">
-              🚧 Coming soon • ✓ Remote play • ✓ Individual devices
+              🚧 Coming soon • ✓ Remote play • ✓ Room codes
             </div>
           </div>
           

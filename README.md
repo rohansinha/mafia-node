@@ -286,13 +286,55 @@ NEXT_PUBLIC_ELEVENLABS_API_KEY=your-elevenlabs-api-key
 - [x] Change default to 6 player minimum game, with 2 Mafia and 4 Civilians
 - [ ] Special role selection should allow 0 citizens/civilians 
 
+### Local Multiplayer Enhancements
+- [ ] Implement WebSocket server for local network communication
+- [ ] Add QR code generation for easy device joining
+- [ ] Handle reconnection when player device loses connection
+- [ ] Add host transfer capability if host device disconnects
+- [ ] Implement lobby system with ready-up before game starts
+
+### Online Multiplayer (Future)
+- [ ] Create dedicated game server (Node.js/Express + Socket.io)
+- [ ] Implement room creation with shareable room codes
+- [ ] Add player authentication (optional user accounts)
+- [ ] Server-side game state validation and anti-cheat
+- [ ] Implement spectator mode for eliminated players or observers
+- [ ] Add in-game chat functionality
+- [ ] Latency compensation for real-time actions
+- [ ] Implement matchmaking system for public games
+- [ ] Add friend system and private invites
+- [ ] Server-side TTS or audio streaming from host
+- [ ] Persistent game history and statistics
+- [ ] Leaderboards and ranking system
+
 ## 🔮 Future Development
 
-### Online Multiplayer Mode
-- 🔄 Real-time multiplayer infrastructure
-- 🔄 Individual device support for each player
-- 🔄 Room creation and joining system
-- 🔄 Synchronized game state across devices
+### Game Modes
+| Mode | Status | Description |
+|------|--------|-------------|
+| Local Offline | ✅ Complete | Single device, pass around |
+| Local Multiplayer | 🔄 In Progress | Multiple devices, same network |
+| Online Multiplayer | 📋 Planned | Internet play with dedicated server |
+
+### Online Multiplayer Architecture (Planned)
+```
+┌─────────────────┐     ┌──────────────────┐
+│  Game Server    │     │   Database       │
+│  (Node.js)      │◄───►│   (PostgreSQL)   │
+│  - Socket.io    │     │   - Users        │
+│  - Game logic   │     │   - Games        │
+│  - Validation   │     │   - Statistics   │
+└────────┬────────┘     └──────────────────┘
+         │
+    WebSocket/HTTP
+         │
+┌────────┴────────┐
+│   Players       │
+│   (Browsers)    │
+│   - React UI    │
+│   - Real-time   │
+└─────────────────┘
+```
 
 ### Additional Features
 - 🔄 Game replay and statistics tracking
