@@ -44,8 +44,70 @@ export enum Role {
  * Game mode selection for local vs online play
  */
 export enum GameMode {
-  OFFLINE = 'Offline',    // Local device-passing gameplay
-  ONLINE = 'Online'       // Online multiplayer (future implementation)
+  OFFLINE = 'Offline',              // Local device-passing gameplay (single device)
+  LOCAL_MULTIPLAYER = 'LocalMultiplayer', // Local network multiplayer (multiple devices, no internet)
+  ONLINE = 'Online'                 // Online multiplayer (future implementation)
+}
+
+/**
+ * Player connection status for local multiplayer
+ */
+export enum ConnectionStatus {
+  DISCONNECTED = 'Disconnected',
+  CONNECTING = 'Connecting',
+  CONNECTED = 'Connected',
+}
+
+/**
+ * Message types for local multiplayer WebSocket communication
+ */
+export enum MessageType {
+  // Connection messages
+  JOIN_GAME = 'join_game',
+  PLAYER_JOINED = 'player_joined',
+  PLAYER_LEFT = 'player_left',
+  
+  // Game state messages
+  GAME_STATE_UPDATE = 'game_state_update',
+  PHASE_CHANGE = 'phase_change',
+  
+  // Action messages
+  REQUEST_ACTION = 'request_action',
+  SUBMIT_ACTION = 'submit_action',
+  ACTION_RECEIVED = 'action_received',
+  
+  // Vote messages
+  REQUEST_VOTE = 'request_vote',
+  SUBMIT_VOTE = 'submit_vote',
+  VOTE_RECEIVED = 'vote_received',
+  
+  // Audio/notification messages
+  AUDIO_PLAYING = 'audio_playing',
+  PLAYER_TURN = 'player_turn',
+  
+  // Error messages
+  ERROR = 'error',
+}
+
+/**
+ * WebSocket message structure for local multiplayer
+ */
+export interface GameMessage {
+  type: MessageType;
+  payload?: unknown;
+  playerId?: string;
+  timestamp?: number;
+}
+
+/**
+ * Local multiplayer session info
+ */
+export interface LocalSession {
+  sessionId: string;              // Unique session identifier
+  hostIp: string;                 // Host device IP address
+  port: number;                   // WebSocket port
+  connectedPlayers: string[];     // List of connected player IDs
+  isHost: boolean;                // Whether this device is the host
 }
 
 /**
@@ -141,6 +203,10 @@ export interface GameState {
   currentPlayerIndex: number;        // Index for device-passing mechanics
   assignmentMode?: AssignmentMode;   // Method used for role assignment
   customRoleConfig?: CustomRoleConfig; // Configuration for custom mode
+  // Local multiplayer specific
+  localSession?: LocalSession;       // Session info for local multiplayer
+  currentNightActorId?: string;      // Player whose turn it is for night action
+  awaitingActionFrom?: string[];     // Player IDs we're waiting for actions from
 }
 
 // ============================================================================

@@ -268,6 +268,14 @@ export function getRoleColor(role: Role | string): string {
 }
 
 /**
+ * Get role emoji
+ */
+export function getRoleEmoji(role: Role | string): string {
+  const config = ROLE_CONFIGS[role as Role];
+  return config?.emoji || '👤';
+}
+
+/**
  * Get role description
  */
 export function getRoleDescription(role: Role | string): string {
