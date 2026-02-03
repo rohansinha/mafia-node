@@ -31,6 +31,10 @@ jobs:
           
       - name: Build application
         run: npm run build
+        env:
+          NEXT_PUBLIC_AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          NEXT_PUBLIC_AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
+          NEXT_PUBLIC_ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
 
       - name: Verify next binary exists
         run: |
