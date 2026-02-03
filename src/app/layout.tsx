@@ -13,6 +13,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Mafia Game",
   description: "A digital Mafia party game for large groups",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 /**
