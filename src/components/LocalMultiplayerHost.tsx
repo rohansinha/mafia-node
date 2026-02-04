@@ -29,7 +29,7 @@ import { useSpeech } from '@/hooks/useSpeech';
 import { 
   NetworkManager, 
   generateSessionId, 
-  getLocalIpAddress,
+  detectLocalIpAddress,
   selectMafiaKiller,
   PlayerConnection 
 } from '@/lib/networkManager';
@@ -59,7 +59,8 @@ export default function LocalMultiplayerHost() {
   
   // Session state
   const [sessionId] = useState(() => generateSessionId());
-  const [hostIp] = useState(() => getLocalIpAddress());
+  const [hostIp, setHostIp] = useState<string>('');
+  const [isDetectingIp, setIsDetectingIp] = useState(true);
   const [hostPhase, setHostPhase] = useState<HostPhase>('waiting-for-players');
   const [connectedPlayers, setConnectedPlayers] = useState<ConnectedPlayer[]>([]);
   
@@ -75,6 +76,17 @@ export default function LocalMultiplayerHost() {
   const hasAnnouncedPhase = useRef(false);
   
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
+
+  // --------------------------------------------------------------------------
+  // IP ADDRESS DETECTION
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    detectLocalIpAddress().then((ip) => {
+      setHostIp(ip || '');
+      setIsDetectingIp(false);
+    });
+  }, []);
 
   // --------------------------------------------------------------------------
   // NETWORK INITIALIZATION
@@ -418,12 +430,34 @@ export default function LocalMultiplayerHost() {
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-3xl font-bold mb-2">🎭 Mafia - Host</h1>
-        <div className="bg-blue-900/50 rounded-lg p-4 inline-block">
-          <p className="text-sm text-gray-300 mb-1">Session Code</p>
-          <p className="text-4xl font-mono font-bold tracking-widest">{sessionId}</p>
-          <p className="text-xs text-gray-400 mt-2">
-            Players connect to: <span className="font-mono">{hostIp}:3001</span>
-          </p>
+        
+        {/* Connection Info Box */}
+        <div className="bg-blue-900/50 rounded-lg p-4 inline-block max-w-md">
+          <p className="text-lg text-gray-200 mb-3">Players enter these values to join:</p>
+          
+          {/* Host Address */}
+          <div className="mb-3">
+            <p className="text-xs text-gray-400 mb-1">Host Address</p>
+            {isDetectingIp ? (
+              <p className="text-lg font-mono bg-gray-800 rounded px-3 py-2">Detecting...</p>
+            ) : hostIp ? (
+              <p className="text-2xl font-mono font-bold bg-gray-800 rounded px-3 py-2 select-all">{hostIp}</p>
+            ) : (
+              <div className="bg-yellow-900/50 border border-yellow-600 rounded p-2">
+                <p className="text-yellow-300 text-sm mb-1">⚠️ Could not detect IP automatically</p>
+                <p className="text-gray-300 text-xs">
+                  On Windows: Open CMD and run <code className="bg-gray-700 px-1 rounded">ipconfig</code>
+                  <br />Look for &quot;IPv4 Address&quot; (e.g., 192.168.1.xxx)
+                </p>
+              </div>
+            )}
+          </div>
+          
+          {/* Session Code */}
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Session Code</p>
+            <p className="text-4xl font-mono font-bold tracking-widest bg-gray-800 rounded px-3 py-2 select-all">{sessionId}</p>
+          </div>
         </div>
       </div>
 

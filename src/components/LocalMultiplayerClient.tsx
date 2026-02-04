@@ -307,7 +307,8 @@ export default function LocalMultiplayerClient() {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 flex flex-col items-center justify-center">
         <div className="max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-8">🎭 Join Game</h1>
+          <h1 className="text-3xl font-bold text-center mb-2">🎭 Join Game</h1>
+          <p className="text-gray-400 text-center mb-6">Enter the values shown on the host device</p>
 
           <div className="space-y-4">
             <div>
@@ -322,6 +323,17 @@ export default function LocalMultiplayerClient() {
             </div>
 
             <div>
+              <label className="block text-sm text-gray-400 mb-1">Host Address</label>
+              <input
+                type="text"
+                value={formData.hostAddress}
+                onChange={(e) => setFormData(prev => ({ ...prev, hostAddress: e.target.value }))}
+                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-lg"
+                placeholder="192.168.1.100"
+              />
+            </div>
+
+            <div>
               <label className="block text-sm text-gray-400 mb-1">Session Code</label>
               <input
                 type="text"
@@ -331,20 +343,6 @@ export default function LocalMultiplayerClient() {
                 placeholder="ABC123"
                 maxLength={6}
               />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Host Address</label>
-              <input
-                type="text"
-                value={formData.hostAddress}
-                onChange={(e) => setFormData(prev => ({ ...prev, hostAddress: e.target.value }))}
-                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 focus:border-blue-500 focus:outline-none font-mono"
-                placeholder="192.168.1.100"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                The IP address shown on the host device
-              </p>
             </div>
 
             {errorMessage && (

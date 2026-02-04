@@ -5,16 +5,18 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 ## 🌟 Features
 
 ### Game Modes
-- **🎮 Mode Selection**: Choose between Local Offline and Online Multiplayer
-- **📱 Local Offline**: Pass one device around your group (available now)
-- **📱 Local Multiplayer**: One device hosts the game and everyone on the same WiFi can join with their own devices (available now)
-- **🌐 Online Multiplayer**: Each player uses their own device from wherever they are over the internet (coming soon)
+- **🎮 Mode Selection**: Choose between Local Offline, Local Multiplayer, and Online Multiplayer
+- **📱 Local Offline**: Pass one device around your group - perfect for in-person gatherings
+- **🖥️ Local Multiplayer (Host)**: Set up and host a game from your computer - other devices on your WiFi can join
+- **📡 Join Game**: Connect to a hosted game from any device on the same network
+- **🌐 Online Multiplayer**: Play remotely over the internet (coming soon)
 
 ### Role System
-- **🎯 9 Unique Roles**: Expanded from basic 4 roles to comprehensive role system
+- **🎯 9 Unique Roles**: Comprehensive role system across 3 teams
 - **🔄 Dual Assignment Modes**: Recommended balanced distribution or Custom role selection
 - **⚡ Special Abilities**: Night actions, roleblocking, silencing, and revenge mechanics
-- **🏆 Multiple Win Conditions**: Mafia victory, Town victory, or Individual role victories
+- **🏆 Multiple Win Conditions**: Mafia victory, Town victory, or Independent survival victories
+- **🟡 Independent Roles**: Neutral players who win by surviving - can strategically help either team
 
 ### Gameplay Features
 - **👥 Multi-player Support**: Handle 4+ players with intelligent role assignment
@@ -45,10 +47,12 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 - **Citizen** 👥: No special abilities, but crucial for voting
 
 #### Independent Roles 🟡
-- **Joker** 🃏: Wins immediately if voted out during day phase
-- **Kamikaze** 💥: When voted out, can choose another player to eliminate
-- **Hooker** 🚫: Can roleblock other players, preventing their night actions
-- **Silencer** 🔇: Can silence players, preventing them from speaking during next day phase
+Independent players win by **surviving until the end of the game**. They can strategically choose to help either Mafia or Town to increase their chances of survival. For game balance purposes, independents count as citizens when calculating the mafia:citizen ratio.
+
+- **Joker** 🃏: Wins immediately if voted out during day phase, OR by surviving
+- **Kamikaze** 💥: When voted out, can choose another player to eliminate. Wins by surviving
+- **Hooker** 🚫: Can roleblock other players, preventing their night actions. Wins by surviving
+- **Silencer** 🔇: Can silence players, preventing them from speaking during next day phase. Wins by surviving
 
 ### Game Flow
 
@@ -72,8 +76,8 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 
 - **🔴 Mafia Victory**: Mafia equals or outnumbers Town
 - **🔵 Town Victory**: All Mafia members are eliminated  
-- **🟡 Joker Victory**: Joker is voted out during day phase
-- **Individual Victories**: Achieved through specific role mechanics
+- **🟡 Joker Victory**: Joker is voted out during day phase (instant win)
+- **🟡 Independent Survival**: Hooker, Silencer, Kamikaze, and Joker all win if they survive to the end
 
 ### Assignment Modes
 
@@ -81,12 +85,16 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 - **6 players**: 2 Mafia, 4 Citizens (minimum game size)
 - **7 players**: 2 Mafia, 1 Detective, 4 Citizens
 - **8 players**: 1 Godfather + 1 Mafia, 1 Detective, 1 Doctor, 4 Citizens
-- **10+ players**: Additional special roles for balance (Silencer, Joker)
-- **12+ players**: + Hooker, + Kamikaze
+- **10+ players**: Additional special roles for balance (Joker)
+- **12+ players**: + Hooker, + Kamikaze, + Silencer
 
 **Mafia Rules:**
 - Enforced: 1 mafia per 4 players (minimum 2)
 - Recommended: 1 mafia per 3 players for better gameplay
+
+**Independent Role Balancing:**
+- Independent roles count as citizens for mafia:citizen ratio calculations
+- This ensures game balance when adding multiple independent roles
 
 #### Custom Mode (User-Defined)
 - Choose specific roles and quantities
@@ -110,13 +118,19 @@ A feature-rich digital implementation of the classic Mafia party game with exten
    npm install
    ```
 
-2. **Development server**:
+2. **Development server** (with local multiplayer support):
    ```bash
    npm run dev
    ```
+   This starts both Next.js (port 3000) and WebSocket server (port 3001).
    Navigate to `http://localhost:3000`
 
-3. **Production build**:
+3. **Development server** (Next.js only, no multiplayer):
+   ```bash
+   npm run dev:next
+   ```
+
+4. **Production build**:
    ```bash
    npm run build
    npm start
@@ -124,12 +138,27 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 
 ## 🎯 How to Play
 
-### Setup Process
-1. **Choose Game Mode**: Select Local Offline (recommended for in-person groups)
+### Local Offline Mode (Single Device)
+1. **Choose Game Mode**: Select "Local Offline"
 2. **Select Assignment Mode**: Choose Recommended for balanced games or Custom for specific role selection
 3. **Configure Players**: Enter names and customize roles if using Custom mode
-4. **Role Assignment**: View role distribution and assign roles privately to players
+4. **Role Assignment**: View role distribution and pass device for private role reveals
 5. **Start Game**: Begin with Day 1 discussion phase
+
+### Local Multiplayer Mode (Multiple Devices)
+
+**On the Host Device (computer running the server):**
+1. Start the server with `npm run dev`
+2. Open `http://localhost:3000` in your browser
+3. Select "Host Multiplayer Game"
+4. Configure players and roles
+5. Share the **Host Address** (your IP, e.g., `192.168.1.100`) and **Session Code** with players
+
+**On Player Devices (phones/tablets on same WiFi):**
+1. Open `http://<host-ip>:3000` in browser (e.g., `http://192.168.1.100:3000`)
+2. Select "Join Game"
+3. Enter the **Host Address** and **Session Code** shown on the host
+4. Enter your name and connect
 
 ### Gameplay Loop
 1. **Day Phase**:
@@ -150,12 +179,15 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 
 ### Tech Stack
 - **Frontend**: Next.js 14 with TypeScript and React 18
+- **Backend**: Custom Node.js server with WebSocket support for real-time multiplayer
 - **Styling**: Tailwind CSS with responsive design
 - **State Management**: React Context with useReducer pattern
+- **Real-time Communication**: WebSocket (ws) for local multiplayer
 - **Build System**: Next.js with optimized production builds
 
 ### Project Structure
 ```
+├── server.js              # Custom server (Next.js + WebSocket)
 src/
 ├── app/                    # Next.js app router
 │   ├── layout.tsx         # Root layout
@@ -164,12 +196,16 @@ src/
 │   ├── GameModeSelection.tsx  # Mode selection screen
 │   ├── SetupPhase.tsx     # Game setup and role assignment
 │   ├── GameBoard.tsx      # Main game coordinator
+│   ├── LocalMultiplayerHost.tsx  # Host game screen
+│   ├── LocalMultiplayerClient.tsx # Join game screen
 │   ├── DayPhase.tsx       # Day phase voting and discussion
 │   ├── NightPhase.tsx     # Night phase actions
 │   ├── GameOver.tsx       # End game results
 │   └── OnlinePlay.tsx     # Online mode placeholder
 ├── context/               # State management
 │   └── GameContext.tsx    # Game state and actions
+├── lib/                   # Utilities
+│   └── networkManager.ts  # WebSocket communication
 └── types/                 # TypeScript definitions
     └── game.ts            # Game interfaces and enums
 ```
@@ -189,16 +225,21 @@ src/
 - ✅ Renamed Jester to Joker for clarity
 - ✅ Removed less-used roles (Serial Killer, Vigilante, Bodyguard)
 - ✅ Implemented special abilities (roleblocking, silencing, revenge kills)
+- ✅ **Independent Role System**: Hooker, Silencer, Kamikaze, and Joker are now independent - they win by surviving and can play for either team
+- ✅ **Game Balance**: Independent roles count as citizens for mafia:citizen ratio calculations
 
 ### Assignment System Overhaul
 - ✅ Created dual assignment modes (Recommended/Custom)
-- ✅ Built custom role picker with validation
+- ✅ Built custom role picker with team-grouped selection (Mafia/Town/Independent)
 - ✅ Enhanced setup flow with multi-step configuration
 - ✅ Added role count validation and distribution logic
 
 ### Game Mode Infrastructure
 - ✅ Implemented game mode selection system
 - ✅ Created Local Offline mode (fully functional)
+- ✅ **Local Multiplayer**: Custom WebSocket server for real-time multi-device gameplay
+- ✅ Auto-detection of host vs client based on localhost access
+- ✅ WebRTC-based IP detection for easy connection setup
 - ✅ Built Online Multiplayer placeholder (future development)
 - ✅ Enhanced game flow with proper phase management
 
