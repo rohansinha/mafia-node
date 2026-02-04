@@ -49,9 +49,22 @@ app.prepare().then(() => {
   console.log(`> WebSocket server ready on ws://${hostname}:${wsPort}`);
 
   wss.on('connection', (ws, req) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    console.log(`[WS] Incoming connection - URL: ${req.url}`);
+    
+    // Parse URL carefully - req.url might be just "/?session=X" or "/api/ws?session=X"
+    let url;
+    try {
+      url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    } catch (e) {
+      console.error('[WS] Failed to parse URL:', req.url, e);
+      ws.close(4002, 'Invalid URL');
+      return;
+    }
+    
     const sessionId = url.searchParams.get('session');
     const isHost = url.searchParams.get('host') === 'true';
+
+    console.log(`[WS] Parsed - Session: ${sessionId}, IsHost: ${isHost}`);
 
     if (!sessionId) {
       console.log('[WS] Connection rejected: No session ID');
@@ -77,17 +90,26 @@ app.prepare().then(() => {
       const session = sessions.get(sessionId);
       session.host = ws;
 
+      // Send confirmation to host that connection is established
+      ws.send(JSON.stringify({
+        type: 'HOST_CONNECTED',
+        payload: { sessionId },
+        timestamp: Date.now(),
+      }));
+      console.log(`[WS] Sent HOST_CONNECTED to session ${sessionId}`);
+
       ws.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString());
+          console.log(`[WS] Host message received:`, message.type);
           handleHostMessage(sessionId, message);
         } catch (err) {
           console.error('[WS] Error parsing host message:', err);
         }
       });
 
-      ws.on('close', () => {
-        console.log(`[WS] Host disconnected from session ${sessionId}`);
+      ws.on('close', (code, reason) => {
+        console.log(`[WS] Host disconnected from session ${sessionId}, code: ${code}, reason: ${reason}`);
         // Notify all players that host disconnected
         const session = sessions.get(sessionId);
         if (session) {
@@ -102,70 +124,82 @@ app.prepare().then(() => {
         }
       });
 
-    } else {
-      // Player is connecting
-      const session = sessions.get(sessionId);
-      
-      if (!session) {
-        console.log(`[WS] Player rejected: Session ${sessionId} not found`);
-        ws.send(JSON.stringify({
-          type: 'ERROR',
-          payload: { message: 'Session not found. Check the session code and try again.' },
-          timestamp: Date.now(),
-        }));
-        ws.close(4004, 'Session not found');
-        return;
-      }
-
-      // Temporary player ID until they send JOIN_GAME message
-      let playerId = null;
-      let playerName = null;
-
-      ws.on('message', (data) => {
-        try {
-          const message = JSON.parse(data.toString());
-          
-          if (message.type === 'JOIN_GAME') {
-            playerId = message.payload.playerId;
-            playerName = message.payload.playerName;
-            
-            // Register player in session
-            session.players.set(playerId, { ws, playerName });
-            
-            console.log(`[WS] Player joined: ${playerName} (${playerId}) in session ${sessionId}`);
-            
-            // Forward join message to host
-            if (session.host && session.host.readyState === 1) {
-              session.host.send(JSON.stringify({
-                ...message,
-                timestamp: Date.now(),
-              }));
-            }
-          } else if (playerId) {
-            // Forward other messages to host
-            handlePlayerMessage(sessionId, playerId, message);
-          }
-        } catch (err) {
-          console.error('[WS] Error parsing player message:', err);
-        }
+      ws.on('error', (err) => {
+        console.error(`[WS] Host WebSocket error for session ${sessionId}:`, err);
       });
 
-      ws.on('close', () => {
-        if (playerId) {
-          console.log(`[WS] Player disconnected: ${playerName} (${playerId})`);
-          session.players.delete(playerId);
-          
-          // Notify host of disconnection
-          if (session.host && session.host.readyState === 1) {
-            session.host.send(JSON.stringify({
-              type: 'PLAYER_LEFT',
-              payload: { playerId, playerName },
-              timestamp: Date.now(),
-            }));
-          }
-        }
-      });
+      return; // Important: don't fall through to player handling
     }
+
+    // Player is connecting
+    const session = sessions.get(sessionId);
+    
+    if (!session) {
+      console.log(`[WS] Player rejected: Session ${sessionId} not found`);
+      ws.send(JSON.stringify({
+        type: 'ERROR',
+        payload: { message: 'Session not found. Check the session code and try again.' },
+        timestamp: Date.now(),
+      }));
+      ws.close(4004, 'Session not found');
+      return;
+    }
+
+    // Temporary player ID until they send JOIN_GAME message
+    let playerId = null;
+    let playerName = null;
+
+    ws.on('message', (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        console.log(`[WS] Player message received - Type: ${message.type}, Session: ${sessionId}`);
+        
+        // MessageType.JOIN_GAME = 'join_game' in the TypeScript enum
+        if (message.type === 'join_game') {
+          playerId = message.payload.playerId;
+          playerName = message.payload.playerName;
+          
+          // Register player in session
+          session.players.set(playerId, { ws, playerName });
+          
+          console.log(`[WS] Player joined: ${playerName} (${playerId}) in session ${sessionId}`);
+          console.log(`[WS] Session now has ${session.players.size} player(s)`);
+          
+          // Forward join message to host
+          if (session.host && session.host.readyState === 1) {
+            const forwardMsg = JSON.stringify({
+              ...message,
+              timestamp: Date.now(),
+            });
+            console.log(`[WS] Forwarding JOIN_GAME to host: ${forwardMsg}`);
+            session.host.send(forwardMsg);
+          } else {
+            console.error(`[WS] Cannot forward to host - host state: ${session.host?.readyState}`);
+          }
+        } else if (playerId) {
+          // Forward other messages to host
+          handlePlayerMessage(sessionId, playerId, message);
+        }
+      } catch (err) {
+        console.error('[WS] Error parsing player message:', err);
+      }
+    });
+
+    ws.on('close', () => {
+      if (playerId) {
+        console.log(`[WS] Player disconnected: ${playerName} (${playerId})`);
+        session.players.delete(playerId);
+        
+        // Notify host of disconnection
+        if (session.host && session.host.readyState === 1) {
+          session.host.send(JSON.stringify({
+            type: 'PLAYER_LEFT',
+            payload: { playerId, playerName },
+            timestamp: Date.now(),
+          }));
+        }
+      }
+    });
   });
 
   // Handle messages from host to players

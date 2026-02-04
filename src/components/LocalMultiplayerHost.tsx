@@ -54,7 +54,7 @@ type HostPhase = 'waiting-for-players' | 'role-reveal' | 'game-active';
 // ============================================================================
 
 export default function LocalMultiplayerHost() {
-  const { gameState, submitNightAction, castVote, nextPhase } = useGame();
+  const { gameState, submitNightAction, castVote, nextPhase, initializeGame, startGame } = useGame();
   const speech = useSpeech();
   
   // Session state
@@ -75,6 +75,9 @@ export default function LocalMultiplayerHost() {
   // Speech refs
   const hasAnnouncedPhase = useRef(false);
   
+  // Flag to send roles after initialization
+  const pendingRoleSend = useRef(false);
+  
   const alivePlayers = gameState.players.filter(p => p.status === PlayerStatus.ALIVE);
 
   // --------------------------------------------------------------------------
@@ -89,36 +92,88 @@ export default function LocalMultiplayerHost() {
   }, []);
 
   // --------------------------------------------------------------------------
+  // SEND ROLES AFTER GAME INITIALIZATION
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    // When players are initialized and we're waiting to send roles
+    if (pendingRoleSend.current && gameState.players.length > 0 && hostPhase === 'game-active') {
+      pendingRoleSend.current = false;
+      
+      // Map connected players to game players by name order
+      const activeConnections = connectedPlayers.filter(p => p.isConnected);
+      
+      gameState.players.forEach((player, index) => {
+        const connection = activeConnections[index];
+        if (connection && networkRef.current) {
+          console.log(`[Host] Sending role ${player.role} to ${connection.playerName} (${connection.playerId})`);
+          networkRef.current.sendToPlayer(connection.playerId, {
+            type: MessageType.GAME_STATE_UPDATE,
+            payload: {
+              yourRole: player.role,
+              playerId: player.id,
+              players: gameState.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                status: p.status,
+                role: p.id === player.id ? p.role : undefined,
+              })),
+            },
+          });
+        }
+      });
+
+      // Announce game start
+      speech.speak("The game is starting. Each player has received their role on their device.");
+    }
+  }, [gameState.players, hostPhase, connectedPlayers, speech]);
+
+  // --------------------------------------------------------------------------
   // NETWORK INITIALIZATION
   // --------------------------------------------------------------------------
 
   useEffect(() => {
+    let isMounted = true;
+    
     // Initialize network manager for hosting
     const network = new NetworkManager({ mode: 'local', port: 3001 });
     networkRef.current = network;
 
     // Start hosting
-    network.startHosting(sessionId).then(({ sessionId: sid, port }) => {
-      console.log(`[Host] Session started: ${sid} on port ${port}`);
-    });
+    network.startHosting(sessionId)
+      .then(({ sessionId: sid, port }) => {
+        if (isMounted) {
+          console.log(`[Host] Session started: ${sid} on port ${port}`);
+        }
+      })
+      .catch((error) => {
+        // Only log error if component is still mounted
+        if (isMounted) {
+          console.error('[Host] Failed to start session:', error);
+        }
+      });
 
     // Set up message handlers
     network.on(MessageType.JOIN_GAME, (message) => {
+      if (!isMounted) return;
       const { playerId, playerName } = message.payload as { playerId: string; playerName: string };
       handlePlayerJoin(playerId, playerName);
     });
 
     network.on(MessageType.SUBMIT_ACTION, (message) => {
+      if (!isMounted) return;
       const { actionType, targetId } = message.payload as { actionType: string; targetId: string };
       handleActionSubmission(message.playerId!, actionType, targetId);
     });
 
     network.on(MessageType.SUBMIT_VOTE, (message) => {
+      if (!isMounted) return;
       const { targetId } = message.payload as { targetId: string };
       handleVoteSubmission(message.playerId!, targetId);
     });
 
     return () => {
+      isMounted = false;
       network.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,28 +452,20 @@ export default function LocalMultiplayerHost() {
   };
 
   const handleStartGame = () => {
-    setHostPhase('game-active');
+    // Get connected player names
+    const playerNames = connectedPlayers
+      .filter(p => p.isConnected)
+      .map(p => p.playerName);
     
-    // Send each player their role
-    gameState.players.forEach(player => {
-      if (networkRef.current) {
-        networkRef.current.sendToPlayer(player.id, {
-          type: MessageType.GAME_STATE_UPDATE,
-          payload: {
-            yourRole: player.role,
-            players: gameState.players.map(p => ({
-              id: p.id,
-              name: p.name,
-              status: p.status,
-              role: p.id === player.id ? p.role : undefined,
-            })),
-          },
-        });
-      }
-    });
-
-    // Announce game start
-    speech.speak("The game is starting. Each player has received their role on their device.");
+    // Mark that we need to send roles after state updates
+    pendingRoleSend.current = true;
+    
+    // Initialize game with connected players (assigns roles)
+    initializeGame(playerNames);
+    
+    // Set host phase to active (roles will be sent by useEffect when gameState.players updates)
+    setHostPhase('game-active');
+    startGame();
   };
 
   // --------------------------------------------------------------------------
@@ -465,30 +512,30 @@ export default function LocalMultiplayerHost() {
       {hostPhase === 'waiting-for-players' && (
         <div className="max-w-2xl mx-auto">
           <h2 className="text-xl font-semibold mb-4 text-center">
-            Waiting for Players ({connectedPlayers.filter(p => p.isConnected).length}/{gameState.players.length})
+            Connected Players ({connectedPlayers.filter(p => p.isConnected).length}/{MIN_PLAYERS} minimum)
           </h2>
           
           <div className="grid gap-3 mb-6">
-            {gameState.players.map(player => {
-              const connection = connectedPlayers.find(cp => cp.playerName === player.name);
-              const isConnected = connection?.isConnected || false;
-              
-              return (
+            {connectedPlayers.filter(p => p.isConnected).length === 0 ? (
+              <div className="p-4 rounded-lg bg-gray-800 border border-gray-600 text-center text-gray-400">
+                No players connected yet. Share the session code above with players.
+              </div>
+            ) : (
+              connectedPlayers.filter(p => p.isConnected).map((player, index) => (
                 <div 
-                  key={player.id}
-                  className={`p-4 rounded-lg flex items-center justify-between ${
-                    isConnected ? 'bg-green-900/50 border border-green-500' : 'bg-gray-800 border border-gray-600'
-                  }`}
+                  key={player.playerId}
+                  className="p-4 rounded-lg flex items-center justify-between bg-green-900/50 border border-green-500"
                 >
-                  <span className="font-medium">{player.name}</span>
-                  <span className={`px-3 py-1 rounded-full text-sm ${
-                    isConnected ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300'
-                  }`}>
-                    {isConnected ? '✓ Connected' : 'Waiting...'}
+                  <span className="font-medium">
+                    <span className="text-gray-400 mr-2">#{index + 1}</span>
+                    {player.playerName}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-sm bg-green-500 text-white">
+                    ✓ Connected
                   </span>
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
 
           <button

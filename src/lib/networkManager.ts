@@ -99,11 +99,17 @@ export class NetworkManager {
     
     // Connect to the WebSocket server as host
     return new Promise((resolve, reject) => {
+      let isSettled = false;
+      
       try {
-        const wsUrl = `ws://localhost:${port}?session=${sessionId}&host=true`;
+        // Use ws://localhost:port/?session=X&host=true format
+        const wsUrl = `ws://localhost:${port}/?session=${sessionId}&host=true`;
+        console.log(`[NetworkManager] Connecting to: ${wsUrl}`);
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
+          if (isSettled) return;
+          isSettled = true;
           console.log('[NetworkManager] Host connected to WebSocket server');
           resolve({ sessionId, port });
         };
@@ -111,6 +117,7 @@ export class NetworkManager {
         this.ws.onmessage = (event) => {
           try {
             const message: GameMessage = JSON.parse(event.data);
+            console.log('[NetworkManager] Host received message:', message.type, JSON.stringify(message).substring(0, 200));
             this.handleMessage(message);
           } catch (error) {
             console.error('[NetworkManager] Failed to parse message:', error);
@@ -119,22 +126,32 @@ export class NetworkManager {
 
         this.ws.onerror = (error) => {
           console.error('[NetworkManager] Host WebSocket error:', error);
-          reject(error);
+          // Don't reject here - wait for onclose which gives us more info
         };
 
-        this.ws.onclose = () => {
-          console.log('[NetworkManager] Host connection closed');
+        this.ws.onclose = (event) => {
+          console.log(`[NetworkManager] Host connection closed: code=${event.code}, reason=${event.reason}`);
+          // Only reject if we haven't settled yet (connection failed during setup)
+          if (!isSettled) {
+            isSettled = true;
+            reject(new Error(`Connection failed: ${event.reason || `code ${event.code}`}`));
+          }
         };
 
         // Connection timeout
         setTimeout(() => {
-          if (this.ws?.readyState !== WebSocket.OPEN) {
+          if (!isSettled) {
+            isSettled = true;
+            this.ws?.close();
             reject(new Error('Host connection timeout - is the server running?'));
           }
         }, 5000);
 
       } catch (error) {
-        reject(error);
+        if (!isSettled) {
+          isSettled = true;
+          reject(error);
+        }
       }
     });
   }
@@ -230,11 +247,16 @@ export class NetworkManager {
   async connect(serverUrl: string, playerId: string, playerName: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
       this.localPlayerId = playerId;
+      let isSettled = false;
+      
+      console.log(`[NetworkManager] Attempting to connect to: ${serverUrl}`);
       
       try {
         this.ws = new WebSocket(serverUrl);
 
         this.ws.onopen = () => {
+          if (isSettled) return;
+          isSettled = true;
           console.log('[NetworkManager] Connected to host');
           
           // Send join message
@@ -251,6 +273,7 @@ export class NetworkManager {
         this.ws.onmessage = (event) => {
           try {
             const message: GameMessage = JSON.parse(event.data);
+            console.log('[NetworkManager] Client received:', message.type);
             this.handleMessage(message);
           } catch (error) {
             console.error('[NetworkManager] Failed to parse message:', error);
@@ -259,18 +282,29 @@ export class NetworkManager {
 
         this.ws.onerror = (error) => {
           console.error('[NetworkManager] WebSocket error:', error);
-          reject(error);
+          if (!isSettled) {
+            isSettled = true;
+            reject(error);
+          }
         };
 
-        this.ws.onclose = () => {
-          console.log('[NetworkManager] Connection closed');
+        this.ws.onclose = (event) => {
+          console.log(`[NetworkManager] Connection closed: code=${event.code}, reason=${event.reason}`);
           this.stopHeartbeat();
-          this.handleMessage({ type: MessageType.ERROR, payload: { message: 'Connection lost' } });
+          if (!isSettled) {
+            isSettled = true;
+            reject(new Error(`Connection closed: code ${event.code}, reason: ${event.reason || 'unknown'}`));
+          } else {
+            this.handleMessage({ type: MessageType.ERROR, payload: { message: 'Connection lost' } });
+          }
         };
 
         // Connection timeout
         setTimeout(() => {
-          if (this.ws?.readyState !== WebSocket.OPEN) {
+          if (!isSettled && this.ws?.readyState !== WebSocket.OPEN) {
+            isSettled = true;
+            console.log('[NetworkManager] Connection timeout');
+            this.ws?.close();
             reject(new Error('Connection timeout'));
           }
         }, CONNECTION_TIMEOUT);
@@ -327,6 +361,7 @@ export class NetworkManager {
    */
   private handleMessage(message: GameMessage): void {
     const handlers = this.messageHandlers.get(message.type) || [];
+    console.log(`[NetworkManager] handleMessage: ${message.type}, handlers: ${handlers.length}`);
     handlers.forEach((handler) => {
       try {
         handler(message, message.playerId);

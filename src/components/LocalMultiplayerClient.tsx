@@ -56,12 +56,18 @@ interface JoinFormData {
 // COMPONENT
 // ============================================================================
 
+const PLAYER_NAME_STORAGE_KEY = 'mafia_player_name';
+
 export default function LocalMultiplayerClient() {
-  // Connection form state
-  const [formData, setFormData] = useState<JoinFormData>({
-    sessionCode: '',
-    playerName: '',
-    hostAddress: '',
+  // Connection form state - auto-detect host address from browser URL and load cached player name
+  const [formData, setFormData] = useState<JoinFormData>(() => {
+    const detectedHost = typeof window !== 'undefined' ? window.location.hostname : '';
+    const cachedName = typeof window !== 'undefined' ? localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || '' : '';
+    return {
+      sessionCode: '',
+      playerName: cachedName,
+      hostAddress: detectedHost,
+    };
   });
   const [isJoining, setIsJoining] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -94,6 +100,9 @@ export default function LocalMultiplayerClient() {
       return;
     }
 
+    // Cache player name for next time
+    localStorage.setItem(PLAYER_NAME_STORAGE_KEY, formData.playerName);
+
     setIsJoining(true);
     setErrorMessage(null);
     setClientState(prev => ({ ...prev, connectionStatus: ConnectionStatus.CONNECTING }));
@@ -108,8 +117,10 @@ export default function LocalMultiplayerClient() {
       // Set up message handlers before connecting
       setupMessageHandlers(network, playerId);
 
-      // Connect to host
-      const serverUrl = `ws://${formData.hostAddress}:3001/api/ws?session=${formData.sessionCode}`;
+      // Connect to host - WebSocket server is on port 3001 at root path
+      const serverUrl = `ws://${formData.hostAddress}:3001/?session=${formData.sessionCode}`;
+      console.log(`[Client] Attempting to join session ${formData.sessionCode} at ${serverUrl}`);
+      console.log(`[Client] Host address from form: ${formData.hostAddress}`);
       await network.connect(serverUrl, playerId, formData.playerName);
 
       setClientState(prev => ({
@@ -125,7 +136,8 @@ export default function LocalMultiplayerClient() {
 
     } catch (error) {
       console.error('Failed to join game:', error);
-      setErrorMessage('Failed to connect. Check the host address and try again.');
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setErrorMessage(`Failed to connect: ${errorMsg}. Check the host address and session code.`);
       setClientState(prev => ({ ...prev, connectionStatus: ConnectionStatus.DISCONNECTED }));
     } finally {
       setIsJoining(false);
@@ -308,7 +320,7 @@ export default function LocalMultiplayerClient() {
       <div className="min-h-screen bg-gray-900 text-white p-4 flex flex-col items-center justify-center">
         <div className="max-w-md w-full">
           <h1 className="text-3xl font-bold text-center mb-2">🎭 Join Game</h1>
-          <p className="text-gray-400 text-center mb-6">Enter the values shown on the host device</p>
+          <p className="text-gray-400 text-center mb-6">Enter the session code shown on the host device</p>
 
           <div className="space-y-4">
             <div>
@@ -323,17 +335,6 @@ export default function LocalMultiplayerClient() {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Host Address</label>
-              <input
-                type="text"
-                value={formData.hostAddress}
-                onChange={(e) => setFormData(prev => ({ ...prev, hostAddress: e.target.value }))}
-                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-lg"
-                placeholder="192.168.1.100"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm text-gray-400 mb-1">Session Code</label>
               <input
                 type="text"
@@ -342,7 +343,27 @@ export default function LocalMultiplayerClient() {
                 className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-xl tracking-widest text-center"
                 placeholder="ABC123"
                 maxLength={6}
+                autoFocus
               />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                Host Address 
+                {formData.hostAddress && <span className="text-green-400 ml-2">✓ Auto-detected</span>}
+              </label>
+              <input
+                type="text"
+                value={formData.hostAddress}
+                onChange={(e) => setFormData(prev => ({ ...prev, hostAddress: e.target.value }))}
+                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-lg"
+                placeholder="192.168.1.100"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.hostAddress 
+                  ? 'Auto-filled from your browser URL. Change only if needed.'
+                  : 'The IP address shown on the host device'}
+              </p>
             </div>
 
             {errorMessage && (
