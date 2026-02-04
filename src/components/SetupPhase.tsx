@@ -24,6 +24,7 @@ import { useGame } from '@/context/GameContext';
 import { AssignmentMode, Role } from '@/types/game';
 import { GameLogger } from '@/lib/logger';
 import { gameConfig, configUtils } from '@/config/configManager';
+import { ROLE_CONFIGS, Team } from '@/constants/roles';
 
 export default function SetupPhase() {
   // Component state for managing setup flow
@@ -313,32 +314,67 @@ export default function SetupPhase() {
             <h3 className="text-lg font-semibold text-white mb-3">
               Select Special Roles ({selectedRoles.length} selected)
             </h3>
-            <div className="grid grid-cols-1 gap-3">
-              {availableRoles.map((role) => (
-                <button
-                  key={role}
-                  onClick={() => toggleRole(role)}
-                  disabled={!selectedRoles.includes(role) && remainingSlots <= 0}
-                  className={`p-3 rounded-lg border-2 transition-colors text-left ${
-                    selectedRoles.includes(role)
-                      ? 'border-purple-500 bg-purple-600/30'
-                      : remainingSlots > 0
-                      ? 'border-white/30 bg-white/5 hover:bg-white/10'
-                      : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-white font-medium">{role}</span>
-                    {selectedRoles.includes(role) && (
-                      <span className="text-purple-300">✓</span>
-                    )}
+            
+            {/* Group roles by team */}
+            {(['TOWN', 'MAFIA', 'INDEPENDENT'] as const).map((teamKey) => {
+              const teamRoles = availableRoles.filter(role => {
+                const config = ROLE_CONFIGS[role];
+                return config?.team === (teamKey === 'TOWN' ? Team.TOWN : teamKey === 'MAFIA' ? Team.MAFIA : Team.INDEPENDENT);
+              });
+              
+              if (teamRoles.length === 0) return null;
+              
+              const teamColors = {
+                TOWN: { bg: 'bg-blue-900/30', border: 'border-blue-500/50', text: 'text-blue-300' },
+                MAFIA: { bg: 'bg-red-900/30', border: 'border-red-500/50', text: 'text-red-300' },
+                INDEPENDENT: { bg: 'bg-yellow-900/30', border: 'border-yellow-500/50', text: 'text-yellow-300' },
+              };
+              
+              const teamDescriptions = {
+                TOWN: 'Win when all Mafia are eliminated',
+                MAFIA: 'Win when Mafia equals or outnumbers Town',
+                INDEPENDENT: 'Win by surviving - can play for either team!',
+              };
+              
+              const colors = teamColors[teamKey];
+              
+              return (
+                <div key={teamKey} className={`mb-4 p-3 rounded-lg ${colors.bg} border ${colors.border}`}>
+                  <h4 className={`font-semibold ${colors.text} mb-1`}>
+                    {teamKey === 'TOWN' ? '🔵 Town Roles' : teamKey === 'MAFIA' ? '🔴 Mafia Roles' : '🟡 Independent Roles'}
+                  </h4>
+                  <p className="text-white/50 text-xs mb-3">{teamDescriptions[teamKey]}</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {teamRoles.map((role) => (
+                      <button
+                        key={role}
+                        onClick={() => toggleRole(role)}
+                        disabled={!selectedRoles.includes(role) && remainingSlots <= 0}
+                        className={`p-3 rounded-lg border-2 transition-colors text-left ${
+                          selectedRoles.includes(role)
+                            ? 'border-purple-500 bg-purple-600/30'
+                            : remainingSlots > 0
+                            ? 'border-white/30 bg-white/5 hover:bg-white/10'
+                            : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-white font-medium">
+                            {ROLE_CONFIGS[role]?.emoji} {role}
+                          </span>
+                          {selectedRoles.includes(role) && (
+                            <span className="text-purple-300">✓</span>
+                          )}
+                        </div>
+                        <p className="text-white/60 text-xs mt-1">
+                          {ROLE_CONFIGS[role]?.shortDescription || getRoleDescription(role)}
+                        </p>
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-white/60 text-xs mt-1">
-                    {getRoleDescription(role)}
-                  </p>
-                </button>
-              ))}
-            </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="bg-white/5 rounded-lg p-4">
@@ -348,10 +384,20 @@ export default function SetupPhase() {
               {(() => {
                 const remainingPlayers = totalPlayers - selectedRoles.length;
                 
-                // Count mafia-team roles already selected (Godfather, Hooker count toward mafia)
-                const selectedMafiaCount = selectedRoles.filter(r => 
-                  r === Role.GODFATHER || r === Role.HOOKER
-                ).length;
+                // Count mafia-team roles already selected (using ROLE_CONFIGS for proper team check)
+                const selectedMafiaRoles = selectedRoles.filter(r => 
+                  ROLE_CONFIGS[r]?.team === Team.MAFIA
+                );
+                const selectedMafiaCount = selectedMafiaRoles.length;
+                
+                // Count independent roles (count as citizens for balancing purposes)
+                const selectedIndependentRoles = selectedRoles.filter(r => 
+                  ROLE_CONFIGS[r]?.team === Team.INDEPENDENT
+                );
+                const independentCount = selectedIndependentRoles.length;
+                
+                // For balancing: independent roles count as citizens
+                const effectiveCitizenCount = independentCount;
                 
                 // Enforced: 1 per 4 players, minimum 2 for base game
                 const enforcedMafia = Math.max(2, Math.floor(totalPlayers / 4));
@@ -363,12 +409,21 @@ export default function SetupPhase() {
                 
                 return (
                   <>
-                    <p>Citizens: {Math.max(0, numCitizens)}</p>
-                    <p>Mafia Team: {numMafia + selectedMafiaCount} 
-                      {selectedMafiaCount > 0 && (
-                        <span className="text-white/50"> (includes {selectedRoles.filter(r => r === Role.GODFATHER || r === Role.HOOKER).join(', ')})</span>
+                    <p>Citizens: {Math.max(0, numCitizens + effectiveCitizenCount)}
+                      {independentCount > 0 && (
+                        <span className="text-white/50"> (includes {independentCount} independent)</span>
                       )}
                     </p>
+                    <p>Mafia Team: {numMafia + selectedMafiaCount} 
+                      {selectedMafiaCount > 0 && (
+                        <span className="text-white/50"> (includes {selectedMafiaRoles.join(', ')})</span>
+                      )}
+                    </p>
+                    {selectedIndependentRoles.length > 0 && (
+                      <p className="text-yellow-300/80">Independent: {selectedIndependentRoles.length}
+                        <span className="text-white/50"> ({selectedIndependentRoles.join(', ')} - count as citizens for balance)</span>
+                      </p>
+                    )}
                     <p>Total: {totalPlayers}</p>
                     <p className="text-white/50 text-xs mt-1">
                       Enforced minimum: {enforcedMafia} mafia (1 per 4 players, min 2)
@@ -388,7 +443,7 @@ export default function SetupPhase() {
           disabled={(() => {
             const remainingPlayers = totalPlayers - selectedRoles.length;
             const selectedMafiaCount = selectedRoles.filter(r => 
-              r === Role.GODFATHER || r === Role.HOOKER
+              ROLE_CONFIGS[r]?.team === Team.MAFIA
             ).length;
             const enforcedMafia = Math.max(2, Math.floor(totalPlayers / 4));
             const additionalMafiaNeeded = Math.max(0, enforcedMafia - selectedMafiaCount);

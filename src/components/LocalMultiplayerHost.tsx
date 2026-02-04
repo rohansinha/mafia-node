@@ -364,12 +364,25 @@ export default function LocalMultiplayerHost() {
   // UI HELPERS
   // --------------------------------------------------------------------------
 
+  const MIN_PLAYERS = gameConfig.players.minPlayers || 6;
+  const connectedCount = connectedPlayers.filter(p => p.isConnected).length;
+  const hasEnoughPlayers = connectedCount >= MIN_PLAYERS;
+
   const allPlayersConnected = connectedPlayers.length >= gameState.players.length &&
     connectedPlayers.every(cp => 
       gameState.players.some(p => p.name === cp.playerName && cp.isConnected)
     );
 
-  const canStartGame = hostPhase === 'waiting-for-players' && allPlayersConnected;
+  const canStartGame = hostPhase === 'waiting-for-players' && hasEnoughPlayers;
+
+  // Determine the button message
+  const getStartButtonText = () => {
+    if (canStartGame) return 'Start Game';
+    if (connectedCount < MIN_PLAYERS) {
+      return `Need ${MIN_PLAYERS - connectedCount} more player${MIN_PLAYERS - connectedCount === 1 ? '' : 's'} (minimum ${MIN_PLAYERS})`;
+    }
+    return 'Waiting for all players to connect...';
+  };
 
   const handleStartGame = () => {
     setHostPhase('game-active');
@@ -453,7 +466,7 @@ export default function LocalMultiplayerHost() {
                 : 'bg-gray-700 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {canStartGame ? 'Start Game' : 'Waiting for all players to connect...'}
+            {getStartButtonText()}
           </button>
         </div>
       )}

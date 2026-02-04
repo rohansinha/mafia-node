@@ -117,14 +117,28 @@ export function assignRolesRecommended(playerNames: string[]): Player[] {
 
 /**
  * Assigns roles using custom user-defined configuration.
+ * Independent roles count as citizens for mafia:citizen balancing.
  */
 export function assignRolesCustom(playerNames: string[], customConfig: CustomRoleConfig): Player[] {
   const { selectedRoles, totalPlayers } = customConfig;
   const roles: Role[] = [...selectedRoles];
   
+  // Count independent roles - they count as citizens for balancing
+  const independentCount = selectedRoles.filter(r => 
+    ROLE_CONFIGS[r]?.team === Team.INDEPENDENT
+  ).length;
+  
+  // Count mafia roles already selected
+  const selectedMafiaCount = selectedRoles.filter(r => 
+    ROLE_CONFIGS[r]?.team === Team.MAFIA
+  ).length;
+  
   const remainingPlayers = totalPlayers - selectedRoles.length;
   const recommendedMafia = Math.max(1, Math.floor(totalPlayers / 4));
-  const numMafia = Math.min(recommendedMafia, Math.max(1, Math.floor(remainingPlayers / 3)));
+  
+  // Subtract already selected mafia from recommended amount
+  const additionalMafiaNeeded = Math.max(0, recommendedMafia - selectedMafiaCount);
+  const numMafia = Math.min(additionalMafiaNeeded, Math.max(0, Math.floor(remainingPlayers / 3)));
   const numCitizens = remainingPlayers - numMafia;
   
   for (let i = 0; i < numMafia; i++) {

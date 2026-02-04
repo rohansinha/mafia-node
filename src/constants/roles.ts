@@ -95,9 +95,9 @@ export const ROLE_CONFIGS: Record<Role, RoleConfig> = {
   [Role.HOOKER]: {
     role: Role.HOOKER,
     displayName: 'Hooker',
-    team: Team.MAFIA,
-    description: "Your goal: Block other players' night actions",
-    shortDescription: 'Can roleblock other players, preventing their night actions',
+    team: Team.INDEPENDENT,
+    description: "Your goal: Survive until the end! Block players' night actions to stay useful.",
+    shortDescription: 'Independent role - roleblocks players, wins by surviving',
     nightAction: 'roleblock',
     canTargetSelf: false,
     canTargetTeammates: false,
@@ -171,9 +171,9 @@ export const ROLE_CONFIGS: Record<Role, RoleConfig> = {
   [Role.SILENCER]: {
     role: Role.SILENCER,
     displayName: 'Silencer',
-    team: Team.TOWN,
-    description: 'Your goal: Mute players during discussion phase',
-    shortDescription: 'Can silence players, preventing them from speaking during day phase',
+    team: Team.INDEPENDENT,
+    description: 'Your goal: Survive! Use your silencing power strategically to help your chosen team.',
+    shortDescription: 'Independent role - silences players, wins by surviving',
     nightAction: 'silence',
     canTargetSelf: false,
     canTargetTeammates: true,
@@ -190,9 +190,9 @@ export const ROLE_CONFIGS: Record<Role, RoleConfig> = {
   [Role.KAMIKAZE]: {
     role: Role.KAMIKAZE,
     displayName: 'Kamikaze',
-    team: Team.TOWN,
-    description: 'Your goal: Take someone with you if voted out',
-    shortDescription: 'When voted out, can choose another player to eliminate',
+    team: Team.INDEPENDENT,
+    description: 'Your goal: Survive, or take someone down with you if voted out!',
+    shortDescription: 'Independent role - when voted out, eliminates another player',
     nightAction: null,
     canTargetSelf: false,
     canTargetTeammates: true,
@@ -210,8 +210,8 @@ export const ROLE_CONFIGS: Record<Role, RoleConfig> = {
     role: Role.JOKER,
     displayName: 'Joker',
     team: Team.INDEPENDENT,
-    description: 'Your goal: Get voted out to win!',
-    shortDescription: 'Wins immediately if voted out during day phase',
+    description: 'Your goal: Get voted out to win! Play chaotically.',
+    shortDescription: 'Independent role - wins if voted out during day phase',
     nightAction: null,
     canTargetSelf: false,
     canTargetTeammates: false,
@@ -311,7 +311,12 @@ export const CUSTOM_ASSIGNABLE_ROLES: Role[] = [
 /**
  * Mafia team roles for win condition checks
  */
-export const MAFIA_TEAM_ROLES: Role[] = [Role.MAFIA, Role.GODFATHER, Role.HOOKER];
+export const MAFIA_TEAM_ROLES: Role[] = [Role.MAFIA, Role.GODFATHER];
+
+/**
+ * Independent roles - win by surviving, can play for either team
+ */
+export const INDEPENDENT_ROLES: Role[] = [Role.HOOKER, Role.JOKER, Role.KAMIKAZE, Role.SILENCER];
 
 /**
  * Town team roles for win condition checks
@@ -320,6 +325,4 @@ export const TOWN_TEAM_ROLES: Role[] = [
   Role.CITIZEN,
   Role.DETECTIVE,
   Role.DOCTOR,
-  Role.SILENCER,
-  Role.KAMIKAZE,
 ];

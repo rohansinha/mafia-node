@@ -7,7 +7,8 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 ### Game Modes
 - **🎮 Mode Selection**: Choose between Local Offline and Online Multiplayer
 - **📱 Local Offline**: Pass one device around your group (available now)
-- **🌐 Online Multiplayer**: Each player uses their own device (coming soon)
+- **📱 Local Multiplayer**: One device hosts the game and everyone on the same WiFi can join with their own devices (available now)
+- **🌐 Online Multiplayer**: Each player uses their own device from wherever they are over the internet (coming soon)
 
 ### Role System
 - **🎯 9 Unique Roles**: Expanded from basic 4 roles to comprehensive role system
@@ -36,17 +37,18 @@ A feature-rich digital implementation of the classic Mafia party game with exten
 #### Mafia Team 🔴
 - **Mafia** 🔪: Basic Mafia member who can eliminate players at night
 - **Godfather** 👑: Enhanced Mafia leader with kill ability
-- **Hooker** 🚫: Can roleblock other players, preventing their night actions
+
 
 #### Town Team 🔵  
 - **Detective** 🕵️: Investigate one player per night to learn their role
 - **Doctor** 🏥: Protect one player per night from attacks
 - **Citizen** 👥: No special abilities, but crucial for voting
-- **Silencer** 🔇: Can silence players, preventing them from speaking during next day phase
 
 #### Independent Roles 🟡
 - **Joker** 🃏: Wins immediately if voted out during day phase
 - **Kamikaze** 💥: When voted out, can choose another player to eliminate
+- **Hooker** 🚫: Can roleblock other players, preventing their night actions
+- **Silencer** 🔇: Can silence players, preventing them from speaking during next day phase
 
 ### Game Flow
 
