@@ -10,7 +10,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-APP_DIR="/home/pi/mafia-node"
+# Auto-detect user and app directory
+CURRENT_USER="${SUDO_USER:-$USER}"
+APP_DIR="/home/$CURRENT_USER/mafia-node"
 SERVICE_FILE="$APP_DIR/scripts/mafia-game.service"
 
 echo -e "${BLUE}"
@@ -19,15 +21,7 @@ echo "║           MAFIA GAME - RASPBERRY PI SETUP                  ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-# Check if running as pi user
-if [ "$USER" != "pi" ]; then
-    echo -e "${YELLOW}Warning: This script is designed for user 'pi'. Current user: $USER${NC}"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
+echo -e "${GREEN}Running as user: $CURRENT_USER${NC}"
 
 # Check Node.js version
 echo -e "${GREEN}Checking Node.js...${NC}"
@@ -49,7 +43,7 @@ chmod +x scripts/*.sh
 # Create log files
 echo -e "${GREEN}Setting up log files...${NC}"
 sudo touch /var/log/mafia-deploy.log /var/log/mafia-updates.log
-sudo chown pi:pi /var/log/mafia-deploy.log /var/log/mafia-updates.log
+sudo chown $CURRENT_USER:$CURRENT_USER /var/log/mafia-deploy.log /var/log/mafia-updates.log
 
 # Install dependencies
 echo -e "${GREEN}Installing dependencies...${NC}"
@@ -59,9 +53,40 @@ npm ci
 echo -e "${GREEN}Building Next.js application...${NC}"
 npm run build
 
-# Install systemd service
+# Generate and install systemd service with correct user
 echo -e "${GREEN}Installing systemd service...${NC}"
-sudo cp "$SERVICE_FILE" /etc/systemd/system/mafia-game.service
+cat << EOF | sudo tee /etc/systemd/system/mafia-game.service > /dev/null
+[Unit]
+Description=Mafia Game Server
+Documentation=https://github.com/rohansinha/mafia-node
+After=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+Group=$CURRENT_USER
+WorkingDirectory=$APP_DIR
+
+ExecStart=/usr/bin/node server.js
+ExecReload=/bin/kill -HUP \$MAINPID
+
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=WS_PORT=3001
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mafia-game
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 sudo systemctl daemon-reload
 sudo systemctl enable mafia-game
 

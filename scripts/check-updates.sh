@@ -2,7 +2,8 @@
 # Mafia Game - Auto-Update Checker
 # Run this via cron to automatically deploy updates
 
-APP_DIR="${APP_DIR:-/home/pi/mafia-node}"
+CURRENT_USER="${SUDO_USER:-$USER}"
+APP_DIR="${APP_DIR:-/home/$CURRENT_USER/mafia-node}"
 DEPLOY_SCRIPT="$APP_DIR/scripts/deploy.sh"
 LOG_FILE="/var/log/mafia-updates.log"
 

@@ -11,7 +11,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-APP_DIR="${APP_DIR:-/home/pi/mafia-node}"
+CURRENT_USER="${SUDO_USER:-$USER}"
+APP_DIR="${APP_DIR:-/home/$CURRENT_USER/mafia-node}"
 SERVICE_NAME="mafia-game"
 LOG_FILE="/var/log/mafia-deploy.log"
 
