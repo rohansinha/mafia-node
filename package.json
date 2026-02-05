@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "node .next/standalone/server.js",
-    "start:production": "node server.js",
+    "start": "NODE_ENV=production node server.js",
+    "start:standalone": "node .next/standalone/server.js",
     "lint": "next lint",
     "azure:build": "npm install && npm run build",
     "azure:start": "npm start"
@@ -15,12 +16,14 @@
     "@microsoft/applicationinsights-web": "^3.3.9",
     "next": "14.2.7",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.9.19",
     "eslint": "^8",

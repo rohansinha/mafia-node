@@ -87,24 +87,78 @@ export class NetworkManager {
 
   /**
    * Start hosting a local multiplayer session
-   * Note: In browser environment, we use a different approach with Server-Sent Events
-   * or a lightweight signaling mechanism
+   * Connects to the WebSocket server as the host
    */
   async startHosting(sessionId: string): Promise<{ sessionId: string; port: number }> {
     this.isHost = true;
     this.sessionId = sessionId;
     
-    // For local multiplayer, we'll use the Next.js API route as the WebSocket server
-    // The host connects to their own server
     const port = this.config.port || DEFAULT_LOCAL_PORT;
     
     console.log(`[NetworkManager] Starting host session: ${sessionId}`);
     
-    return { sessionId, port };
+    // Connect to the WebSocket server as host
+    return new Promise((resolve, reject) => {
+      let isSettled = false;
+      
+      try {
+        // Use ws://localhost:port/?session=X&host=true format
+        const wsUrl = `ws://localhost:${port}/?session=${sessionId}&host=true`;
+        console.log(`[NetworkManager] Connecting to: ${wsUrl}`);
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+          if (isSettled) return;
+          isSettled = true;
+          console.log('[NetworkManager] Host connected to WebSocket server');
+          resolve({ sessionId, port });
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const message: GameMessage = JSON.parse(event.data);
+            console.log('[NetworkManager] Host received message:', message.type, JSON.stringify(message).substring(0, 200));
+            this.handleMessage(message);
+          } catch (error) {
+            console.error('[NetworkManager] Failed to parse message:', error);
+          }
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[NetworkManager] Host WebSocket error:', error);
+          // Don't reject here - wait for onclose which gives us more info
+        };
+
+        this.ws.onclose = (event) => {
+          console.log(`[NetworkManager] Host connection closed: code=${event.code}, reason=${event.reason}`);
+          // Only reject if we haven't settled yet (connection failed during setup)
+          if (!isSettled) {
+            isSettled = true;
+            reject(new Error(`Connection failed: ${event.reason || `code ${event.code}`}`));
+          }
+        };
+
+        // Connection timeout
+        setTimeout(() => {
+          if (!isSettled) {
+            isSettled = true;
+            this.ws?.close();
+            reject(new Error('Host connection timeout - is the server running?'));
+          }
+        }, 5000);
+
+      } catch (error) {
+        if (!isSettled) {
+          isSettled = true;
+          reject(error);
+        }
+      }
+    });
   }
 
   /**
-   * Broadcast a message to all connected players
+   * Broadcast a message to all connected players (host only)
+   * Sends through the WebSocket server which relays to all players
    */
   broadcast(message: GameMessage): void {
     if (!this.isHost) {
@@ -112,29 +166,36 @@ export class NetworkManager {
       return;
     }
 
-    const messageWithTimestamp = {
-      ...message,
-      timestamp: Date.now(),
-    };
-
-    this.connections.forEach((connection) => {
-      if (connection.ws && connection.ws.readyState === WebSocket.OPEN) {
-        connection.ws.send(JSON.stringify(messageWithTimestamp));
-      }
-    });
-  }
-
-  /**
-   * Send a message to a specific player
-   */
-  sendToPlayer(playerId: string, message: GameMessage): void {
-    const connection = this.connections.get(playerId);
-    if (connection?.ws && connection.ws.readyState === WebSocket.OPEN) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const messageWithTimestamp = {
         ...message,
         timestamp: Date.now(),
       };
-      connection.ws.send(JSON.stringify(messageWithTimestamp));
+      this.ws.send(JSON.stringify(messageWithTimestamp));
+    } else {
+      console.warn('[NetworkManager] Cannot broadcast: not connected to server');
+    }
+  }
+
+  /**
+   * Send a message to a specific player (host only)
+   * Sends through the WebSocket server which relays to the target player
+   */
+  sendToPlayer(playerId: string, message: GameMessage): void {
+    if (!this.isHost) {
+      console.warn('[NetworkManager] Only host can send to specific players');
+      return;
+    }
+
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const messageWithTimestamp = {
+        ...message,
+        targetPlayerId: playerId,
+        timestamp: Date.now(),
+      };
+      this.ws.send(JSON.stringify(messageWithTimestamp));
+    } else {
+      console.warn('[NetworkManager] Cannot send: not connected to server');
     }
   }
 
@@ -186,11 +247,16 @@ export class NetworkManager {
   async connect(serverUrl: string, playerId: string, playerName: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
       this.localPlayerId = playerId;
+      let isSettled = false;
+      
+      console.log(`[NetworkManager] Attempting to connect to: ${serverUrl}`);
       
       try {
         this.ws = new WebSocket(serverUrl);
 
         this.ws.onopen = () => {
+          if (isSettled) return;
+          isSettled = true;
           console.log('[NetworkManager] Connected to host');
           
           // Send join message
@@ -207,6 +273,7 @@ export class NetworkManager {
         this.ws.onmessage = (event) => {
           try {
             const message: GameMessage = JSON.parse(event.data);
+            console.log('[NetworkManager] Client received:', message.type);
             this.handleMessage(message);
           } catch (error) {
             console.error('[NetworkManager] Failed to parse message:', error);
@@ -215,18 +282,29 @@ export class NetworkManager {
 
         this.ws.onerror = (error) => {
           console.error('[NetworkManager] WebSocket error:', error);
-          reject(error);
+          if (!isSettled) {
+            isSettled = true;
+            reject(error);
+          }
         };
 
-        this.ws.onclose = () => {
-          console.log('[NetworkManager] Connection closed');
+        this.ws.onclose = (event) => {
+          console.log(`[NetworkManager] Connection closed: code=${event.code}, reason=${event.reason}`);
           this.stopHeartbeat();
-          this.handleMessage({ type: MessageType.ERROR, payload: { message: 'Connection lost' } });
+          if (!isSettled) {
+            isSettled = true;
+            reject(new Error(`Connection closed: code ${event.code}, reason: ${event.reason || 'unknown'}`));
+          } else {
+            this.handleMessage({ type: MessageType.ERROR, payload: { message: 'Connection lost' } });
+          }
         };
 
         // Connection timeout
         setTimeout(() => {
-          if (this.ws?.readyState !== WebSocket.OPEN) {
+          if (!isSettled && this.ws?.readyState !== WebSocket.OPEN) {
+            isSettled = true;
+            console.log('[NetworkManager] Connection timeout');
+            this.ws?.close();
             reject(new Error('Connection timeout'));
           }
         }, CONNECTION_TIMEOUT);
@@ -283,6 +361,7 @@ export class NetworkManager {
    */
   private handleMessage(message: GameMessage): void {
     const handlers = this.messageHandlers.get(message.type) || [];
+    console.log(`[NetworkManager] handleMessage: ${message.type}, handlers: ${handlers.length}`);
     handlers.forEach((handler) => {
       try {
         handler(message, message.playerId);
@@ -363,16 +442,72 @@ export function generateSessionId(): string {
 
 /**
  * Get the local IP address for displaying to players
- * Note: This is a simplified version; actual implementation may vary
+ * Uses WebRTC to detect the local network IP address
  */
 export function getLocalIpAddress(): string {
-  // In browser environment, we can't directly get the IP
-  // The host will need to check their network settings
-  // For now, return localhost for development
+  // In browser environment, we can't directly get the IP synchronously
+  // Return empty string initially - use detectLocalIpAddress() for async detection
   if (typeof window !== 'undefined') {
-    return window.location.hostname || 'localhost';
+    // If accessed via IP already, use that
+    const hostname = window.location.hostname;
+    if (hostname && hostname !== 'localhost' && !hostname.includes('127.0.0.1')) {
+      return hostname;
+    }
   }
-  return 'localhost';
+  return '';
+}
+
+/**
+ * Async function to detect local IP address using WebRTC
+ * Falls back to manual entry if detection fails
+ */
+export async function detectLocalIpAddress(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  
+  // If already accessed via IP, use that
+  const hostname = window.location.hostname;
+  if (hostname && hostname !== 'localhost' && !hostname.includes('127.0.0.1')) {
+    return hostname;
+  }
+
+  return new Promise((resolve) => {
+    // Timeout after 3 seconds
+    const timeout = setTimeout(() => {
+      resolve(null);
+    }, 3000);
+
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.createDataChannel('');
+      
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        
+        const candidate = event.candidate.candidate;
+        // Look for local IP in the candidate string
+        const ipMatch = candidate.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);
+        if (ipMatch) {
+          const ip = ipMatch[0];
+          // Filter out localhost and link-local addresses
+          if (!ip.startsWith('127.') && !ip.startsWith('169.254.')) {
+            clearTimeout(timeout);
+            pc.close();
+            resolve(ip);
+          }
+        }
+      };
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(() => {
+          clearTimeout(timeout);
+          resolve(null);
+        });
+    } catch {
+      clearTimeout(timeout);
+      resolve(null);
+    }
+  });
 }
 
 /**

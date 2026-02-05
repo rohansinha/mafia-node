@@ -1,6 +1,55 @@
-# 🚀 Deployment Checklist for Azure Fix
+# 🚀 Deployment Guide
 
-## ✅ Completed Steps
+## Raspberry Pi Local Deployment (Recommended for Local Play)
+
+### Prerequisites
+- Raspberry Pi with Raspbian/Debian OS
+- Node.js 18+ installed
+- Git repository cloned to `/home/pi/mafia-node`
+
+### Quick Setup (One Command)
+```bash
+cd ~/mafia-node
+git pull origin main
+chmod +x scripts/*.sh
+./scripts/setup-pi.sh
+```
+
+### What the Setup Does
+1. ✅ Installs npm dependencies
+2. ✅ Builds the Next.js application
+3. ✅ Installs systemd service (auto-start on boot)
+4. ✅ Configures firewall (ports 3000, 3001)
+5. ✅ Sets up auto-update cron job (checks every 5 minutes)
+
+### Manual Commands
+
+| Action | Command |
+|--------|---------|
+| Start server | `sudo systemctl start mafia-game` |
+| Stop server | `sudo systemctl stop mafia-game` |
+| Restart server | `sudo systemctl restart mafia-game` |
+| View logs | `journalctl -u mafia-game -f` |
+| Check status | `sudo systemctl status mafia-game` |
+| Manual deploy | `./scripts/deploy.sh` |
+| View update logs | `tail -f /var/log/mafia-updates.log` |
+
+### How Auto-Updates Work
+- Cron checks GitHub every 5 minutes
+- If new commits exist, it pulls, builds, and restarts automatically
+- Deploy logs: `/var/log/mafia-deploy.log`
+- Update check logs: `/var/log/mafia-updates.log`
+
+### Access the Game
+After setup, players connect to:
+- **Web App:** `http://<raspberry-pi-ip>:3000`
+- **Find IP:** Run `hostname -I` on the Pi
+
+---
+
+## Azure App Service Deployment
+
+### ✅ Completed Steps
 - [x] Fixed corrupted GitHub Actions workflow file
 - [x] Added comprehensive build verification
 - [x] Created health check API endpoint
@@ -8,7 +57,7 @@
 - [x] Verified package.json has correct scripts
 - [x] Added comprehensive error handling to config and logger
 
-## 🔧 Required Azure Configuration (CRITICAL)
+### 🔧 Required Azure Configuration (CRITICAL)
 
 ### 1. App Service Runtime Settings
 **Go to Azure Portal → App Services → PnwMafia → Configuration → General settings:**

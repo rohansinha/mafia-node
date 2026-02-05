@@ -1,0 +1,40 @@
+[Unit]
+Description=Mafia Game Server
+Documentation=https://github.com/rohansinha/mafia-node
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/mafia-node
+
+# Node.js application
+ExecStart=/usr/bin/node server.js
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart configuration
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=WS_PORT=3001
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mafia-game
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/mafia-node/.next
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

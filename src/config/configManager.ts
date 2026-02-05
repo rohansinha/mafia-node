@@ -28,7 +28,7 @@ const configData = {
       "audioPromptReplayDelay": 10
     },
     "players": {
-      "minPlayers": 4,
+      "minPlayers": 6,
       "maxPlayers": 20
     },
     "features": {
