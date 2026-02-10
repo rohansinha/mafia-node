@@ -64,8 +64,11 @@ export enum ConnectionStatus {
 export enum MessageType {
   // Connection messages
   JOIN_GAME = 'join_game',
+  REJOIN_GAME = 'rejoin_game',
   PLAYER_JOINED = 'player_joined',
   PLAYER_LEFT = 'player_left',
+  PLAYER_RECONNECTED = 'player_reconnected',
+  PLAYER_DISCONNECTED = 'player_disconnected',
   
   // Game state messages
   GAME_STATE_UPDATE = 'game_state_update',

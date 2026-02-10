@@ -22,7 +22,21 @@ const handle = app.getRequestHandler();
 // Store active game sessions
 const sessions = new Map();
 
-// Session structure: { sessionId: { host: ws, players: Map<playerId, { ws, playerName }>, gameState: any } }
+/**
+ * Session structure:
+ * {
+ *   sessionId: {
+ *     host: ws,
+ *     players: Map<playerId, { ws, playerName, isConnected, gameRole, gamePlayerId }>,
+ *     gameStarted: boolean,
+ *     gameState: any
+ *   }
+ * }
+ * 
+ * - playerId: The persistent browser ID (stored in localStorage)
+ * - gamePlayerId: The ID used in game state (assigned when game starts)
+ * - gameRole: The player's role (assigned when game starts)
+ */
 
 app.prepare().then(() => {
   // Create HTTP server for Next.js
@@ -137,7 +151,7 @@ app.prepare().then(() => {
     if (!session) {
       console.log(`[WS] Player rejected: Session ${sessionId} not found`);
       ws.send(JSON.stringify({
-        type: 'ERROR',
+        type: 'error',
         payload: { message: 'Session not found. Check the session code and try again.' },
         timestamp: Date.now(),
       }));
@@ -145,36 +159,88 @@ app.prepare().then(() => {
       return;
     }
 
-    // Temporary player ID until they send JOIN_GAME message
+    // Player ID from the connection (will be set when they send JOIN_GAME)
     let playerId = null;
     let playerName = null;
+    let isReconnection = false;
 
     ws.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
         console.log(`[WS] Player message received - Type: ${message.type}, Session: ${sessionId}`);
         
-        // MessageType.JOIN_GAME = 'join_game' in the TypeScript enum
+        // Handle join_game message (new join or reconnection)
         if (message.type === 'join_game') {
           playerId = message.payload.playerId;
           playerName = message.payload.playerName;
           
-          // Register player in session
-          session.players.set(playerId, { ws, playerName });
+          // Check if this is a reconnection (player with this ID already exists)
+          const existingPlayer = session.players.get(playerId);
           
-          console.log(`[WS] Player joined: ${playerName} (${playerId}) in session ${sessionId}`);
-          console.log(`[WS] Session now has ${session.players.size} player(s)`);
-          
-          // Forward join message to host
-          if (session.host && session.host.readyState === 1) {
-            const forwardMsg = JSON.stringify({
-              ...message,
-              timestamp: Date.now(),
-            });
-            console.log(`[WS] Forwarding JOIN_GAME to host: ${forwardMsg}`);
-            session.host.send(forwardMsg);
+          if (existingPlayer) {
+            // Reconnection - update the WebSocket connection
+            isReconnection = true;
+            existingPlayer.ws = ws;
+            existingPlayer.isConnected = true;
+            
+            console.log(`[WS] Player reconnected: ${playerName} (${playerId}) in session ${sessionId}`);
+            
+            // Notify host of reconnection
+            if (session.host && session.host.readyState === 1) {
+              session.host.send(JSON.stringify({
+                type: 'player_reconnected',
+                payload: { 
+                  playerId, 
+                  playerName,
+                  gamePlayerId: existingPlayer.gamePlayerId,
+                  gameRole: existingPlayer.gameRole,
+                },
+                timestamp: Date.now(),
+              }));
+            }
+            
+            // If game has started, send the player their game state
+            if (session.gameStarted && existingPlayer.gamePlayerId) {
+              ws.send(JSON.stringify({
+                type: 'rejoin_game',
+                payload: {
+                  gamePlayerId: existingPlayer.gamePlayerId,
+                  gameRole: existingPlayer.gameRole,
+                  gameStarted: true,
+                },
+                timestamp: Date.now(),
+              }));
+            }
           } else {
-            console.error(`[WS] Cannot forward to host - host state: ${session.host?.readyState}`);
+            // New player joining
+            session.players.set(playerId, { 
+              ws, 
+              playerName, 
+              isConnected: true,
+              gamePlayerId: null,
+              gameRole: null,
+            });
+            
+            console.log(`[WS] New player joined: ${playerName} (${playerId}) in session ${sessionId}`);
+            console.log(`[WS] Session now has ${session.players.size} player(s)`);
+            
+            // Forward join message to host
+            if (session.host && session.host.readyState === 1) {
+              session.host.send(JSON.stringify({
+                ...message,
+                timestamp: Date.now(),
+              }));
+            }
+          }
+        } else if (message.type === 'assign_game_role') {
+          // Host is assigning a game role to a player (when game starts)
+          const { targetPlayerId, gamePlayerId, gameRole } = message.payload;
+          const player = session.players.get(targetPlayerId);
+          if (player) {
+            player.gamePlayerId = gamePlayerId;
+            player.gameRole = gameRole;
+            session.gameStarted = true;
+            console.log(`[WS] Assigned role ${gameRole} to ${player.playerName}`);
           }
         } else if (playerId) {
           // Forward other messages to host
@@ -187,16 +253,23 @@ app.prepare().then(() => {
 
     ws.on('close', () => {
       if (playerId) {
-        console.log(`[WS] Player disconnected: ${playerName} (${playerId})`);
-        session.players.delete(playerId);
+        const player = session.players.get(playerId);
         
-        // Notify host of disconnection
-        if (session.host && session.host.readyState === 1) {
-          session.host.send(JSON.stringify({
-            type: 'PLAYER_LEFT',
-            payload: { playerId, playerName },
-            timestamp: Date.now(),
-          }));
+        if (player) {
+          // Mark as disconnected but don't remove (allow reconnection)
+          player.isConnected = false;
+          player.ws = null;
+          
+          console.log(`[WS] Player disconnected: ${playerName} (${playerId}) - keeping in session for reconnection`);
+          
+          // Notify host of disconnection (but player can still reconnect)
+          if (session.host && session.host.readyState === 1) {
+            session.host.send(JSON.stringify({
+              type: 'player_disconnected',
+              payload: { playerId, playerName, canReconnect: true },
+              timestamp: Date.now(),
+            }));
+          }
         }
       }
     });

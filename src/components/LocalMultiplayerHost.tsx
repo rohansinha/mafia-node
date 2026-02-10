@@ -41,10 +41,11 @@ import { MAFIA_TEAM_ROLES, getRoleEmoji, getRoleColor } from '@/constants/roles'
 // ============================================================================
 
 interface ConnectedPlayer {
-  playerId: string;
+  playerId: string;        // Persistent browser ID
   playerName: string;
   isConnected: boolean;
   hasSubmittedAction: boolean;
+  gamePlayerId?: string;   // ID in the game state (assigned when game starts)
 }
 
 type HostPhase = 'waiting-for-players' | 'role-reveal' | 'game-active';
@@ -107,11 +108,25 @@ export default function LocalMultiplayerHost() {
         const connection = activeConnections[index];
         if (connection && networkRef.current) {
           console.log(`[Host] Sending role ${player.role} to ${connection.playerName} (${connection.playerId})`);
+          
+          // Notify server of role assignment (for reconnection support)
+          networkRef.current.send({
+            type: 'assign_game_role' as any,
+            payload: {
+              targetPlayerId: connection.playerId,
+              gamePlayerId: player.id,
+              gameRole: player.role,
+            },
+          });
+          
+          // Send role to the player
           networkRef.current.sendToPlayer(connection.playerId, {
             type: MessageType.GAME_STATE_UPDATE,
             payload: {
               yourRole: player.role,
               playerId: player.id,
+              phase: gameState.currentPhase,
+              dayCount: gameState.dayCount,
               players: gameState.players.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -120,6 +135,13 @@ export default function LocalMultiplayerHost() {
               })),
             },
           });
+          
+          // Update connectedPlayers with their game player ID
+          setConnectedPlayers(prev => prev.map(cp => 
+            cp.playerId === connection.playerId 
+              ? { ...cp, gamePlayerId: player.id } 
+              : cp
+          ));
         }
       });
 
@@ -158,6 +180,18 @@ export default function LocalMultiplayerHost() {
       if (!isMounted) return;
       const { playerId, playerName } = message.payload as { playerId: string; playerName: string };
       handlePlayerJoin(playerId, playerName);
+    });
+
+    network.on(MessageType.PLAYER_RECONNECTED, (message) => {
+      if (!isMounted) return;
+      const { playerId, playerName } = message.payload as { playerId: string; playerName: string };
+      handlePlayerReconnect(playerId, playerName);
+    });
+
+    network.on(MessageType.PLAYER_DISCONNECTED, (message) => {
+      if (!isMounted) return;
+      const { playerId, playerName } = message.payload as { playerId: string; playerName: string };
+      handlePlayerDisconnect(playerId, playerName);
     });
 
     network.on(MessageType.SUBMIT_ACTION, (message) => {
@@ -223,11 +257,58 @@ export default function LocalMultiplayerHost() {
     GameLogger.logGameEvent('PlayerConnected', { playerId, playerName, sessionId });
   }, [gameState, sessionId]);
 
-  const handlePlayerDisconnect = useCallback((playerId: string) => {
+  const handlePlayerDisconnect = useCallback((playerId: string, playerName: string) => {
+    console.log(`[Host] Player disconnected: ${playerName} (${playerId})`);
     setConnectedPlayers(prev => 
       prev.map(p => p.playerId === playerId ? { ...p, isConnected: false } : p)
     );
-  }, []);
+    
+    // Announce disconnection if game is active
+    if (hostPhase === 'game-active') {
+      speech.speak(`${playerName} has disconnected. They can rejoin using the same session code.`);
+    }
+    
+    GameLogger.logGameEvent('PlayerDisconnected', { playerId, playerName, sessionId });
+  }, [hostPhase, speech, sessionId]);
+
+  const handlePlayerReconnect = useCallback((playerId: string, playerName: string) => {
+    console.log(`[Host] Player reconnected: ${playerName} (${playerId})`);
+    setConnectedPlayers(prev => 
+      prev.map(p => p.playerId === playerId ? { ...p, isConnected: true } : p)
+    );
+    
+    // Find the player's game state and send it to them
+    const connectedPlayer = connectedPlayers.find(p => p.playerId === playerId);
+    if (connectedPlayer && networkRef.current) {
+      // Find their game player
+      const gamePlayer = gameState.players.find(p => p.name === connectedPlayer.playerName);
+      
+      if (gamePlayer && hostPhase === 'game-active') {
+        // Send their full game state
+        networkRef.current.sendToPlayer(playerId, {
+          type: MessageType.GAME_STATE_UPDATE,
+          payload: {
+            yourRole: gamePlayer.role,
+            playerId: gamePlayer.id,
+            phase: gameState.currentPhase,
+            dayCount: gameState.dayCount,
+            players: gameState.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              status: p.status,
+              role: p.id === gamePlayer.id || p.isRevealed ? p.role : undefined,
+              isRevealed: p.isRevealed,
+              isSilenced: p.isSilenced,
+            })),
+          },
+        });
+        
+        speech.speak(`${playerName} has reconnected.`);
+      }
+    }
+    
+    GameLogger.logGameEvent('PlayerReconnected', { playerId, playerName, sessionId });
+  }, [connectedPlayers, gameState, hostPhase, speech, sessionId]);
 
   // --------------------------------------------------------------------------
   // ACTION HANDLERS
@@ -516,22 +597,30 @@ export default function LocalMultiplayerHost() {
           </h2>
           
           <div className="grid gap-3 mb-6">
-            {connectedPlayers.filter(p => p.isConnected).length === 0 ? (
+            {connectedPlayers.length === 0 ? (
               <div className="p-4 rounded-lg bg-gray-800 border border-gray-600 text-center text-gray-400">
                 No players connected yet. Share the session code above with players.
               </div>
             ) : (
-              connectedPlayers.filter(p => p.isConnected).map((player, index) => (
+              connectedPlayers.map((player, index) => (
                 <div 
                   key={player.playerId}
-                  className="p-4 rounded-lg flex items-center justify-between bg-green-900/50 border border-green-500"
+                  className={`p-4 rounded-lg flex items-center justify-between ${
+                    player.isConnected 
+                      ? 'bg-green-900/50 border border-green-500' 
+                      : 'bg-yellow-900/30 border border-yellow-600'
+                  }`}
                 >
                   <span className="font-medium">
                     <span className="text-gray-400 mr-2">#{index + 1}</span>
                     {player.playerName}
                   </span>
-                  <span className="px-3 py-1 rounded-full text-sm bg-green-500 text-white">
-                    ✓ Connected
+                  <span className={`px-3 py-1 rounded-full text-sm ${
+                    player.isConnected 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-yellow-600 text-white'
+                  }`}>
+                    {player.isConnected ? '✓ Connected' : '⚠ Disconnected'}
                   </span>
                 </div>
               ))

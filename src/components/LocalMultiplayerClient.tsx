@@ -57,16 +57,71 @@ interface JoinFormData {
 // ============================================================================
 
 const PLAYER_NAME_STORAGE_KEY = 'mafia_player_name';
+const PLAYER_ID_STORAGE_KEY = 'mafia_player_id';
+const LAST_SESSION_STORAGE_KEY = 'mafia_last_session';
+
+/**
+ * Get or create a persistent player ID for this browser
+ */
+function getOrCreatePlayerId(): string {
+  if (typeof window === 'undefined') return '';
+  
+  let playerId = localStorage.getItem(PLAYER_ID_STORAGE_KEY);
+  if (!playerId) {
+    playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+  }
+  return playerId;
+}
+
+/**
+ * Save the current session info for potential reconnection
+ */
+function saveSessionInfo(sessionCode: string, hostAddress: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_SESSION_STORAGE_KEY, JSON.stringify({
+    sessionCode,
+    hostAddress,
+    timestamp: Date.now(),
+  }));
+}
+
+/**
+ * Get last session info if still valid (within 2 hours)
+ */
+function getLastSessionInfo(): { sessionCode: string; hostAddress: string } | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const data = localStorage.getItem(LAST_SESSION_STORAGE_KEY);
+    if (!data) return null;
+    
+    const session = JSON.parse(data);
+    const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+    
+    if (session.timestamp > twoHoursAgo) {
+      return { sessionCode: session.sessionCode, hostAddress: session.hostAddress };
+    }
+  } catch (e) {
+    console.error('Failed to parse last session:', e);
+  }
+  return null;
+}
 
 export default function LocalMultiplayerClient() {
+  // Persistent player ID
+  const [persistentPlayerId] = useState(() => getOrCreatePlayerId());
+  
   // Connection form state - auto-detect host address from browser URL and load cached player name
   const [formData, setFormData] = useState<JoinFormData>(() => {
     const detectedHost = typeof window !== 'undefined' ? window.location.hostname : '';
     const cachedName = typeof window !== 'undefined' ? localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || '' : '';
+    const lastSession = getLastSessionInfo();
+    
     return {
-      sessionCode: '',
+      sessionCode: lastSession?.sessionCode || '',
       playerName: cachedName,
-      hostAddress: detectedHost,
+      hostAddress: lastSession?.hostAddress || detectedHost,
     };
   });
   const [isJoining, setIsJoining] = useState(false);
@@ -100,8 +155,9 @@ export default function LocalMultiplayerClient() {
       return;
     }
 
-    // Cache player name for next time
+    // Cache player name and session info for reconnection
     localStorage.setItem(PLAYER_NAME_STORAGE_KEY, formData.playerName);
+    saveSessionInfo(formData.sessionCode, formData.hostAddress);
 
     setIsJoining(true);
     setErrorMessage(null);
@@ -111,8 +167,9 @@ export default function LocalMultiplayerClient() {
       const network = new NetworkManager({ mode: 'local' });
       networkRef.current = network;
 
-      // Generate a unique player ID
-      const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Use persistent player ID for reconnection support
+      const playerId = persistentPlayerId;
+      console.log(`[Client] Using persistent player ID: ${playerId}`);
 
       // Set up message handlers before connecting
       setupMessageHandlers(network, playerId);
@@ -145,6 +202,26 @@ export default function LocalMultiplayerClient() {
   };
 
   const setupMessageHandlers = (network: NetworkManager, playerId: string) => {
+    // Handle successful rejoin (reconnection to an existing game)
+    network.on(MessageType.REJOIN_GAME, (message) => {
+      const payload = message.payload as { 
+        gamePlayerId: string; 
+        gameRole: string; 
+        gameStarted: boolean;
+      };
+      console.log('[Client] Rejoin successful:', payload);
+      
+      if (payload.gameStarted) {
+        setClientState(prev => ({
+          ...prev,
+          myRole: payload.gameRole as Role,
+          myPlayerId: payload.gamePlayerId,
+          connectionStatus: ConnectionStatus.CONNECTED,
+        }));
+        setErrorMessage(null);
+      }
+    });
+    
     // Game state updates
     network.on(MessageType.GAME_STATE_UPDATE, (message) => {
       const payload = message.payload as any;
@@ -223,6 +300,15 @@ export default function LocalMultiplayerClient() {
         setClientState(prev => ({ ...prev, connectionStatus: ConnectionStatus.DISCONNECTED }));
       }
     });
+  };
+
+  // --------------------------------------------------------------------------
+  // RECONNECTION
+  // --------------------------------------------------------------------------
+
+  const handleReconnect = async () => {
+    setErrorMessage(null);
+    await handleJoinGame();
   };
 
   // --------------------------------------------------------------------------
@@ -310,6 +396,43 @@ export default function LocalMultiplayerClient() {
       networkRef.current?.disconnect();
     };
   }, []);
+
+  // --------------------------------------------------------------------------
+  // RENDER - DISCONNECTED (with reconnect option)
+  // --------------------------------------------------------------------------
+
+  if (clientState.connectionStatus === ConnectionStatus.DISCONNECTED && clientState.myRole) {
+    // Was in a game but got disconnected - show reconnect UI
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-4 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold mb-2">Connection Lost</h1>
+          <p className="text-gray-400 mb-6">
+            You were disconnected from the game. Click below to rejoin.
+          </p>
+          
+          {errorMessage && (
+            <div className="bg-red-900/50 border border-red-500 rounded-lg p-3 mb-4 text-red-300">
+              {errorMessage}
+            </div>
+          )}
+          
+          <button
+            onClick={handleReconnect}
+            disabled={isJoining}
+            className="w-full p-4 rounded-lg font-bold text-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+          >
+            {isJoining ? 'Reconnecting...' : '🔄 Reconnect to Game'}
+          </button>
+          
+          <p className="text-sm text-gray-500 mt-4">
+            Session: {formData.sessionCode} • Your role is safe
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // --------------------------------------------------------------------------
   // RENDER - JOIN FORM

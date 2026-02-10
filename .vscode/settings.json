@@ -1,0 +1,7 @@
+{
+    "sarif-viewer.connectToGithubCodeScanning": "off",
+    "github.copilot.chat.codeGeneration.excludeFiles": [
+        "**/.env*",
+        "**/secrets/**"
+    ]
+}
